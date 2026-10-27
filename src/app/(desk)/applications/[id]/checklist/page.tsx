@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { ApplicationFrame } from "@/components/application-frame";
-import { StatusText } from "@/components/ui";
+import { StatusText, DataTable } from "@/components/ui";
 import { useDesk } from "@/lib/store";
 
 export default function ChecklistPage() {
@@ -16,7 +16,7 @@ export default function ChecklistPage() {
       {groups.map((group) => (
         <section key={group} style={{ marginBottom: 22 }}>
           <h2 className="block-title">{group}</h2>
-          <table className="data">
+          <DataTable>
             <thead>
               <tr>
                 <th>Document</th>
@@ -56,7 +56,7 @@ export default function ChecklistPage() {
                   );
                 })}
             </tbody>
-          </table>
+          </DataTable>
         </section>
       ))}
       {items.length === 0 && <p>No checklist was stored for this application.</p>}

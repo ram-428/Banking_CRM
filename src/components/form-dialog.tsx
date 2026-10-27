@@ -10,6 +10,7 @@ export function FormDialog({
   description,
   submitLabel,
   wide,
+  readOnly,
   onClose,
   onSubmit,
   children,
@@ -19,6 +20,7 @@ export function FormDialog({
   description?: string;
   submitLabel: string;
   wide?: boolean;
+  readOnly?: boolean;
   onClose: () => void;
   onSubmit: () => void;
   children: React.ReactNode;
@@ -67,10 +69,18 @@ export function FormDialog({
         >
           <div className="modal-body">{children}</div>
           <footer className="modal-foot">
-            <Button type="button" variant="secondary" onClick={onClose}>
-              Cancel
-            </Button>
-            <Button type="submit">{submitLabel}</Button>
+            {readOnly ? (
+              <Button type="button" onClick={onClose}>
+                Close
+              </Button>
+            ) : (
+              <>
+                <Button type="button" variant="secondary" onClick={onClose}>
+                  Cancel
+                </Button>
+                <Button type="submit">{submitLabel}</Button>
+              </>
+            )}
           </footer>
         </form>
       </div>

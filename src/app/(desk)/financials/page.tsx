@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Gate, PageHeader, StatusText } from "@/components/ui";
+import { Gate, PageHeader, StatusText, DataTable } from "@/components/ui";
 import { aed } from "@/lib/format";
 import { profileSections } from "@/lib/metrics";
 import { useDesk } from "@/lib/store";
@@ -13,11 +13,12 @@ export default function FinancialListPage() {
     <Gate module="Financials">
       <div className="page">
         <PageHeader title="Financial profiles" lede="Company figures live once. Applications keep the snapshot they were assessed against." />
-        <table className="data">
+        <DataTable>
           <thead>
             <tr>
               <th>Company</th>
               <th>Profile</th>
+              <th>Completion</th>
               <th>Sections</th>
               <th>Sales turnover</th>
               <th>Statements</th>
@@ -37,6 +38,7 @@ export default function FinancialListPage() {
                   <td>
                     <StatusText value={customer.profileStatus} />
                   </td>
+                  <td>{Math.round((sections.ready / sections.total) * 100)}%</td>
                   <td>
                     {sections.ready} of {sections.total}
                   </td>
@@ -46,7 +48,7 @@ export default function FinancialListPage() {
               );
             })}
           </tbody>
-        </table>
+        </DataTable>
       </div>
     </Gate>
   );

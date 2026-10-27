@@ -9,4 +9,4 @@ npm run dev
 
 Open http://localhost:3000. Choose a person on the sign-in screen, or use password `welcome`.
 
-Customer portal: http://localhost:3000/portal with `nora@alnoor.ae` and code `482193`.
+Customer: http://localhost:3000/customer with `nora@alnoor.ae` and code `482193`.

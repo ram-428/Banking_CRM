@@ -1,5 +1,6 @@
 import { MODULES, noFlags } from "./constants";
 import { uid } from "./format";
+import { applyBankRollup, captureSnapshot } from "./metrics";
 import type {
   RoleConfig,
   Agreement,
@@ -96,6 +97,15 @@ export type LeadInput = {
   channel?: string;
   assignedTo: string;
   remarks?: string;
+  extraContacts?: {
+    name: string;
+    designation?: string;
+    type: "Owner" | "Signatory" | "Other";
+    mobile: string;
+    email: string;
+    alternate?: string;
+    nationality?: string;
+  }[];
 };
 
 export function createLead(state: State, input: LeadInput, actor: User): { state: State; code: string } {
@@ -139,6 +149,9 @@ export function createLead(state: State, input: LeadInput, actor: User): { state
         alternate: input.alternate,
         nationality: input.nationality,
       },
+      ...(input.extraContacts ?? [])
+        .filter((item) => item.name.trim())
+        .map((item) => ({ ...item, id: uid("ct"), name: item.name.trim(), mobile: item.mobile.trim(), email: item.email.trim() })),
     ],
     shareholders: [],
     banks: input.preferredBank ? [{ id: uid("br"), bank: input.preferredBank }] : [],
@@ -230,6 +243,7 @@ export function createApplication(state: State, input: ApplicationInput, actor: 
     tenureMonths: input.tenureMonths,
     financingDate: input.financingDate,
     remarks: input.remarks,
+    snapshot: captureSnapshot(customer, now),
     status: "Document Collection",
     currentStage: "Document Collection",
     stageStatus: "In Progress",
@@ -553,6 +567,9 @@ export function addSubmission(
     status: input.status ?? "Submitted",
     overrideReason: input.overrideReason,
   };
+  const now = new Date().toISOString();
+  const submissions = [submission, ...state.submissions.filter((item) => item.applicationId === input.applicationId)];
+  const rolled = app ? applyBankRollup(app, submissions, state.deliveries.some((item) => item.applicationId === app.id)) : {};
   let next: State = {
     ...state,
     counters: { ...state.counters, submission: n },
@@ -561,12 +578,15 @@ export function addSubmission(
       item.id === input.applicationId
         ? {
             ...item,
-            status: "Submitted to Bank",
-            currentStage: "Bank Processing",
-            stageStatus: "In Progress",
+            ...rolled,
             pendingWith: submission.bank,
-            pendingReason: `Submitted to ${submission.bank}.`,
-            updatedAt: new Date().toISOString(),
+            pendingReason:
+              rolled.status === "Bank Processing"
+                ? "Banks are at different stages. The file stays in bank processing until each submission is finished."
+                : rolled.status === "Approved"
+                  ? "Every open bank has answered, and at least one approval is on file."
+                  : `Recorded with ${submission.bank}.`,
+            updatedAt: now,
             updatedBy: actor.id,
           }
         : item,
@@ -582,15 +602,50 @@ export function updateSubmission(state: State, id: string, patch: Partial<BankSu
   const current = state.submissions.find((item) => item.id === id);
   if (!current) return state;
   const nextRow = { ...current, ...patch };
-  let next: State = { ...state, submissions: state.submissions.map((item) => (item.id === id ? nextRow : item)) };
-  if (patch.status === "Approved") {
+  const submissions = state.submissions.map((item) => (item.id === id ? nextRow : item)).filter((item) => item.applicationId === current.applicationId);
+  const app = state.applications.find((item) => item.id === current.applicationId);
+  const rolled = app ? applyBankRollup(app, submissions, state.deliveries.some((item) => item.applicationId === app.id)) : {};
+  let next: State = {
+    ...state,
+    submissions: state.submissions.map((item) => (item.id === id ? nextRow : item)),
+    applications: state.applications.map((item) =>
+      item.id === current.applicationId
+        ? {
+            ...item,
+            ...rolled,
+            pendingReason:
+              rolled.status === "Bank Processing"
+                ? "Banks are at different stages. The file stays in bank processing until each submission is finished."
+                : rolled.status === "Approved"
+                  ? "Every open bank has answered, and at least one approval is on file."
+                  : item.pendingReason,
+            updatedAt: new Date().toISOString(),
+            updatedBy: actor.id,
+          }
+        : item,
+    ),
+  };
+  if (patch.additionalRequest?.trim()) {
     next = {
       ...next,
-      applications: next.applications.map((item) =>
-        item.id === current.applicationId
-          ? { ...item, status: "Approved", currentStage: "Agreement", stageStatus: "In Progress", pendingWith: "Customer", pendingReason: `${current.bank} approved the facility.`, updatedAt: new Date().toISOString(), updatedBy: actor.id }
-          : item,
-      ),
+      checklist: [
+        {
+          id: uid("chk"),
+          applicationId: current.applicationId,
+          documentCode: "BANK-REQ",
+          name: `${current.bank}: ${patch.additionalRequest.trim()}`,
+          category: "Bank request",
+          requirement: "Mandatory",
+          stage: "bank approval",
+          status: "Pending Upload",
+          customerUpload: true,
+          multiple: false,
+          expiryApplicable: false,
+          aiEnabled: false,
+          requiredNow: true,
+        },
+        ...next.checklist,
+      ],
     };
   }
   return withAudit(next, actor.id, "Update", "Banks", current.reference, { previous: current.status, next: nextRow.status, detail: patch.additionalRequest });
@@ -631,14 +686,17 @@ export function updateAgreement(state: State, id: string, patch: Partial<Agreeme
 }
 
 export function addDelivery(state: State, input: Omit<Delivery, "id" | "recordedBy" | "recordedAt">, actor: User): State {
-  const delivery: Delivery = { ...input, id: uid("del"), recordedBy: actor.id, recordedAt: new Date().toISOString() };
+  const now = new Date().toISOString();
+  const delivery: Delivery = { ...input, id: uid("del"), recordedBy: actor.id, recordedAt: now, updatedAt: now, updatedBy: actor.id };
   const app = state.applications.find((item) => item.id === input.applicationId);
+  const submissions = state.submissions.filter((item) => item.applicationId === input.applicationId);
+  const rolled = app ? applyBankRollup(app, submissions, true) : { status: "Disbursed" as const, currentStage: "Loan Delivery" as const, stageStatus: "In Progress" as const };
   let next: State = {
     ...state,
     deliveries: [delivery, ...state.deliveries],
     applications: state.applications.map((item) =>
       item.id === input.applicationId
-        ? { ...item, status: "Disbursed", currentStage: "Loan Delivery", stageStatus: "In Progress", pendingWith: "Operations", pendingReason: "A disbursement was recorded. Close the file when the outcome is final.", updatedAt: new Date().toISOString(), updatedBy: actor.id }
+        ? { ...item, ...rolled, pendingWith: "Operations", pendingReason: "A disbursement was recorded. Close the file when the outcome is final.", updatedAt: now, updatedBy: actor.id }
         : item,
     ),
   };
@@ -788,7 +846,8 @@ export function updateRole(state: State, id: string, patch: Partial<State["roles
 export function saveDocument(state: State, input: State["documents"][number], actor: User): State {
   const exists = state.documents.some((item) => item.id === input.id);
   const documents = exists ? state.documents.map((item) => (item.id === input.id ? input : item)) : [...state.documents, input];
-  return withAudit({ ...state, documents }, actor.id, exists ? "Update" : "Create", "Documents", input.name, {
+  const counters = exists ? state.counters : { ...state.counters, document: state.counters.document + 1 };
+  return withAudit({ ...state, documents, counters }, actor.id, exists ? "Update" : "Create", "Documents", input.name, {
     detail: "Master change does not alter checklists already generated.",
   });
 }
@@ -800,14 +859,11 @@ export function saveCategory(state: State, input: State["categories"][number], a
 }
 
 export function saveRule(state: State, input: State["rules"][number], actor: User): State {
-  return withAudit(
-    { ...state, rules: [...state.rules, input] },
-    actor.id,
-    "Create",
-    "Documents",
-    input.documentCode,
-    { detail: "Applies to applications created after this change." },
-  );
+  const exists = state.rules.some((item) => item.id === input.id);
+  const rules = exists ? state.rules.map((item) => (item.id === input.id ? input : item)) : [...state.rules, input];
+  return withAudit({ ...state, rules }, actor.id, exists ? "Update" : "Create", "Documents", input.documentCode, {
+    detail: "Applies to applications created after this change. Existing checklists stay as they were.",
+  });
 }
 
 export function markNotice(state: State, id: string): State {

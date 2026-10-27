@@ -1,10 +1,9 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Gate, PageHeader } from "@/components/ui";
+import { Gate, PageHeader, DataTable } from "@/components/ui";
 import { userName } from "@/lib/access";
-import { aed } from "@/lib/format";
-import { formatWhen } from "@/lib/format";
+import { aed, auditResult, formatWhen } from "@/lib/format";
 import { useDesk } from "@/lib/store";
 
 export default function AuditPage() {
@@ -27,7 +26,7 @@ export default function AuditPage() {
   return (
     <Gate module="Audit">
       <div className="page">
-        <PageHeader title="Audit history" lede="Significant customer, document, bank, agreement, task, and closure actions are kept." />
+        <PageHeader title="Activity log" lede="Read-only history of significant actions. Who did what, on which record, and the result." />
         <dl className="facts" style={{ marginBottom: 22 }}>
           <div>
             <dt>Open applications</dt>
@@ -51,21 +50,20 @@ export default function AuditPage() {
             ))}
           </select>
         </div>
-        <table className="data">
+        <DataTable>
           <thead>
             <tr>
-              <th>When</th>
               <th>Actor</th>
               <th>Action</th>
               <th>Module</th>
               <th>Record</th>
-              <th>Change</th>
+              <th>Date/time</th>
+              <th>Result</th>
             </tr>
           </thead>
           <tbody>
             {rows.map((event) => (
               <tr key={event.id}>
-                <td>{formatWhen(event.at)}</td>
                 <td>
                   {userName(state, event.actorId)}
                   <div className="hint">{state.users.find((item) => item.id === event.actorId)?.role}</div>
@@ -73,9 +71,8 @@ export default function AuditPage() {
                 <td>{event.action}</td>
                 <td>{event.module}</td>
                 <td>{event.record}</td>
-                <td>
-                  {event.previous && event.next ? `${event.previous} → ${event.next}` : event.detail}
-                </td>
+                <td>{formatWhen(event.at)}</td>
+                <td>{auditResult(event)}</td>
               </tr>
             ))}
             {rows.length === 0 && (
@@ -84,7 +81,7 @@ export default function AuditPage() {
               </tr>
             )}
           </tbody>
-        </table>
+        </DataTable>
       </div>
     </Gate>
   );

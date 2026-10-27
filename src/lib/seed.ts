@@ -991,7 +991,8 @@ const documents: DocumentMaster[] = [
   doc({ id: "dm-vret", code: "DOC-VRET", name: "VAT Returns", categoryId: "cat-tax", fileTypes: ["pdf"], maxMb: 15, multiple: true, expiryApplicable: false, issueDateRequired: false, expiryDateRequired: false, versioned: true, customerUpload: true, internalUpload: true, ai: false, reminderDays: [], status: "Active" }),
   doc({ id: "dm-bs", code: "DOC-BS", name: "Bank Statements", categoryId: "cat-fin", description: "3, 6, or 12 month coverage.", fileTypes: ["pdf"], maxMb: 25, multiple: true, expiryApplicable: false, issueDateRequired: false, expiryDateRequired: false, versioned: true, customerUpload: true, internalUpload: true, ai: true, reminderDays: [], status: "Active" }),
   doc({ id: "dm-afs", code: "DOC-AFS", name: "Audited Financial Statements", categoryId: "cat-fin", fileTypes: ["pdf"], maxMb: 20, multiple: true, expiryApplicable: false, issueDateRequired: false, expiryDateRequired: false, versioned: true, customerUpload: true, internalUpload: true, ai: false, reminderDays: [], status: "Active" }),
-  doc({ id: "dm-el", code: "DOC-EL", name: "Existing Loan Statements", categoryId: "cat-fin", fileTypes: ["pdf"], maxMb: 15, multiple: true, expiryApplicable: false, issueDateRequired: false, expiryDateRequired: false, versioned: true, customerUpload: true, internalUpload: true, ai: false, reminderDays: [], status: "Active" }),
+  doc({ id: "dm-el", code: "DOC-EL", name: "Existing Loan/Facility Statements", categoryId: "cat-fin", fileTypes: ["pdf"], maxMb: 15, multiple: true, expiryApplicable: false, issueDateRequired: false, expiryDateRequired: false, versioned: true, customerUpload: true, internalUpload: true, ai: false, reminderDays: [], status: "Active" }),
+  doc({ id: "dm-rs", code: "DOC-RS", name: "Repayment Schedule", categoryId: "cat-fin", fileTypes: ["pdf"], maxMb: 10, multiple: true, expiryApplicable: false, issueDateRequired: false, expiryDateRequired: false, versioned: true, customerUpload: true, internalUpload: true, ai: false, reminderDays: [], status: "Active" }),
   doc({ id: "dm-cp", code: "DOC-CP", name: "Company Profile", categoryId: "cat-legal", fileTypes: filePdf, maxMb: 10, multiple: false, expiryApplicable: false, issueDateRequired: false, expiryDateRequired: false, versioned: true, customerUpload: true, internalUpload: true, ai: false, reminderDays: [], status: "Active" }),
   doc({ id: "dm-laf", code: "DOC-LAF", name: "Loan Application Form", categoryId: "cat-agr", fileTypes: ["pdf"], maxMb: 10, multiple: false, expiryApplicable: false, issueDateRequired: false, expiryDateRequired: false, versioned: true, customerUpload: false, internalUpload: true, ai: false, reminderDays: [], status: "Active" }),
   doc({ id: "dm-ol", code: "DOC-OL", name: "Bank Offer Letter", categoryId: "cat-agr", fileTypes: ["pdf"], maxMb: 10, multiple: true, expiryApplicable: false, issueDateRequired: true, expiryDateRequired: false, versioned: true, customerUpload: false, internalUpload: true, ai: false, reminderDays: [], status: "Active" }),
@@ -1016,6 +1017,8 @@ const rules: ChecklistRule[] = (
     ["DOC-LAF", "Mandatory", "credit review", 14, false],
     ["DOC-OL", "Optional", "bank approval", 15, false],
     ["DOC-SLA", "Mandatory", "agreement", 16, true],
+    ["DOC-POA", "Optional", "collection", 17, true],
+    ["DOC-RS", "Optional", "financial review", 18, true],
   ] as const
 ).map(([documentCode, requirement, stage, order, customerUpload], index) => ({
   id: `rule-${index + 1}`,
@@ -1241,7 +1244,7 @@ export function createSeed(): State {
     categories,
     documents,
     rules,
-    counters: { customer: 10502, application: 241, submission: 189, task: 5, followUp: 2, user: 33, document: 17 },
+    counters: { customer: 10502, application: 241, submission: 189, task: 5, followUp: 2, user: 33, document: 18 },
     sessionUserId: null,
     portalEmail: null,
   };

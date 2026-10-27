@@ -9,7 +9,7 @@ import { formatWhen } from "@/lib/format";
 import { useDesk } from "@/lib/store";
 import type { Agreement } from "@/lib/types";
 
-const STATUSES: Agreement["status"][] = ["Draft", "Sent", "Viewed", "Partially Signed", "Completed", "Declined", "Expired", "Failed"];
+const STATUSES: Agreement["status"][] = ["Draft", "Sent", "Viewed", "Partially Signed", "Signed", "Completed", "Declined", "Expired", "Failed"];
 
 export default function AgreementPage() {
   const { id } = useParams<{ id: string }>();
@@ -83,7 +83,7 @@ export default function AgreementPage() {
           {row.remarks && <p>{row.remarks}</p>}
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 8 }}>
             {STATUSES.map((status) => (
-              <Button key={status} variant={status === row.status ? "primary" : "secondary"} onClick={() => replace(updateAgreement(state, row.id, { status, signedAt: status === "Completed" ? new Date().toISOString() : row.signedAt }, user))}>
+              <Button key={status} variant={status === row.status ? "primary" : "secondary"} onClick={() => replace(updateAgreement(state, row.id, { status, signedAt: status === "Signed" || status === "Completed" ? new Date().toISOString() : row.signedAt }, user))}>
                 {status}
               </Button>
             ))}

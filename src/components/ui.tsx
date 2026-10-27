@@ -38,6 +38,86 @@ export function ButtonLink({
   );
 }
 
+function ActionGlyph({ name }: { name: "view" | "edit" | "off" | "on" | "reset" | "add" }) {
+  const props = { width: 16, height: 16, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 1.8, "aria-hidden": true as const };
+  if (name === "view") {
+    return (
+      <svg {...props}>
+        <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z" />
+        <circle cx="12" cy="12" r="3" />
+      </svg>
+    );
+  }
+  if (name === "edit") {
+    return (
+      <svg {...props}>
+        <path d="M12 20h9" />
+        <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z" />
+      </svg>
+    );
+  }
+  if (name === "off") {
+    return (
+      <svg {...props}>
+        <circle cx="12" cy="12" r="8" />
+        <path d="M8 12h8" />
+      </svg>
+    );
+  }
+  if (name === "on") {
+    return (
+      <svg {...props}>
+        <circle cx="12" cy="12" r="8" />
+        <path d="M8.5 12.5l2.5 2.5 4.5-5" />
+      </svg>
+    );
+  }
+  if (name === "reset") {
+    return (
+      <svg {...props}>
+        <circle cx="8" cy="15" r="3" />
+        <path d="M10.6 13.4L20 4" />
+        <path d="M15 5l4 0 0 4" />
+        <path d="M14 9l3 3" />
+      </svg>
+    );
+  }
+  return (
+    <svg {...props}>
+      <path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" />
+      <path d="M14 3v5h5" />
+      <path d="M12 12v6M9 15h6" />
+    </svg>
+  );
+}
+
+export function RowAction({
+  icon,
+  label,
+  href,
+  disabled,
+  onClick,
+}: {
+  icon: "view" | "edit" | "off" | "on" | "reset" | "add";
+  label: string;
+  href?: string;
+  disabled?: boolean;
+  onClick?: () => void;
+}) {
+  if (href) {
+    return (
+      <Link className="action-ico" href={href} aria-label={label} title={label}>
+        <ActionGlyph name={icon} />
+      </Link>
+    );
+  }
+  return (
+    <button className="action-ico" type="button" aria-label={label} title={label} disabled={disabled} onClick={onClick}>
+      <ActionGlyph name={icon} />
+    </button>
+  );
+}
+
 export function Field({
   label,
   required,
@@ -71,6 +151,14 @@ export function StatusText({ value }: { value: string }) {
       <i />
       {value}
     </span>
+  );
+}
+
+export function DataTable({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="table-scroll">
+      <table className="data">{children}</table>
+    </div>
   );
 }
 

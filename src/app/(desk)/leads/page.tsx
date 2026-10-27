@@ -4,11 +4,12 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { CreateLeadDialog } from "@/components/create-lead-dialog";
-import { Button, Gate, PageHeader, StatusText } from "@/components/ui";
-import { can, userName } from "@/lib/access";
+import { Button, DataTable, Gate, PageHeader, RowAction, StatusText } from "@/components/ui";
+import { can, primaryContact, userName } from "@/lib/access";
 import { LEAD_STATUSES } from "@/lib/constants";
-import { formatDate } from "@/lib/format";
+import { formatWhen } from "@/lib/format";
 import { useDesk } from "@/lib/store";
+import type { Customer } from "@/lib/types";
 
 export default function LeadsPage() {
   const { state } = useDesk();
@@ -17,6 +18,7 @@ export default function LeadsPage() {
   const [status, setStatus] = useState("All");
   const [owner, setOwner] = useState("All");
   const [adding, setAdding] = useState(false);
+  const [editing, setEditing] = useState<Customer | null>(null);
 
   useEffect(() => {
     if (sessionStorage.getItem("vrw-open-create") !== "lead") return;
@@ -26,7 +28,7 @@ export default function LeadsPage() {
   const rows = useMemo(() => {
     if (!state) return [];
     return state.customers.filter((customer) => {
-      const blob = `${customer.name} ${customer.code} ${customer.contacts.map((c) => c.name).join(" ")}`.toLowerCase();
+      const blob = `${customer.name} ${customer.code} ${customer.leadSource} ${customer.channel} ${customer.contacts.map((c) => `${c.name} ${c.mobile} ${c.email}`).join(" ")}`.toLowerCase();
       if (q && !blob.includes(q.toLowerCase())) return false;
       if (status !== "All" && customer.leadStatus !== status) return false;
       if (owner !== "All" && customer.assignedTo !== owner) return false;
@@ -39,10 +41,7 @@ export default function LeadsPage() {
   return (
     <Gate module="Leads">
       <div className="page">
-        <PageHeader
-          title="Leads"
-          lede="Each company keeps one master profile. A shared contact does not create a second company."
-        />
+        <PageHeader title="Lead list" lede="Search leads and open a customer record. A shared contact does not create a second company." />
         <div className="filters">
           <input placeholder="Search company, code, or contact" value={q} onChange={(event) => setQ(event.target.value)} aria-label="Search leads" />
           <select value={status} onChange={(event) => setStatus(event.target.value)} aria-label="Lead status">
@@ -67,57 +66,77 @@ export default function LeadsPage() {
             </Button>
           )}
         </div>
-        <table className="data">
+        <DataTable>
           <thead>
             <tr>
-              <th>Customer</th>
-              <th>Contact</th>
-              <th>Service</th>
-              <th>Sales</th>
-              <th>Status</th>
-              <th>Updated</th>
+              <th>Customer code</th>
+              <th>Company name</th>
+              <th>Primary contact</th>
+              <th>Mobile / email</th>
+              <th>Required service</th>
+              <th>Lead source / channel</th>
+              <th>Assigned sales executive</th>
+              <th>Lead status</th>
+              <th>Created / last modified</th>
+              <th>Actions</th>
             </tr>
           </thead>
           <tbody>
             {rows.map((customer) => {
-              const contact = customer.contacts[0];
+              const contact = primaryContact(customer);
               return (
                 <tr key={customer.id}>
+                  <td>{customer.code}</td>
                   <td>
                     <Link className="link" href={`/customers/${customer.code}`}>
                       {customer.name}
                     </Link>
-                    <div className="hint">{customer.code}</div>
                   </td>
+                  <td>{contact?.name ?? "None"}</td>
                   <td>
-                    {contact?.name}
-                    <div className="hint">
-                      {contact?.mobile}
-                      <br />
-                      {contact?.email}
-                    </div>
+                    {contact?.mobile ?? "None"}
+                    <div className="hint">{contact?.email}</div>
                   </td>
                   <td>{customer.service}</td>
+                  <td>
+                    {customer.leadSource || "None"}
+                    <div className="hint">{customer.channel || "No channel"}</div>
+                  </td>
                   <td>{userName(state, customer.assignedTo)}</td>
                   <td>
                     <StatusText value={customer.leadStatus} />
                   </td>
-                  <td>{formatDate(customer.updatedAt)}</td>
+                  <td>
+                    {formatWhen(customer.createdAt)}
+                    <div className="hint">{formatWhen(customer.updatedAt)}</div>
+                  </td>
+                  <td>
+                    <div className="row-actions">
+                      <RowAction icon="view" label="View" href={`/customers/${customer.code}`} />
+                      {can(state, "Leads", "edit") && <RowAction icon="edit" label="Edit" onClick={() => setEditing(customer)} />}
+                      {can(state, "Applications", "create") && <RowAction icon="add" label="Create application" href={`/applications/new?customer=${customer.id}`} />}
+                    </div>
+                  </td>
                 </tr>
               );
             })}
             {rows.length === 0 && (
               <tr>
-                <td colSpan={6}>No leads match these filters.</td>
+                <td colSpan={10}>No leads match these filters.</td>
               </tr>
             )}
           </tbody>
-        </table>
+        </DataTable>
         <CreateLeadDialog
-          open={adding}
-          onClose={() => setAdding(false)}
-          onCreated={(code) => {
+          open={adding || !!editing}
+          customer={editing}
+          onClose={() => {
             setAdding(false);
+            setEditing(null);
+          }}
+          onSaved={(code) => {
+            setAdding(false);
+            setEditing(null);
             router.push(`/customers/${code}`);
           }}
         />

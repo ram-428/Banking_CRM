@@ -49,7 +49,7 @@ export function ApplicationFrame({
   return (
     <div className="page">
       <PageHeader
-        crumbs={[{ href: "/applications", label: "Applications" }, { label: application.number }]}
+        crumbs={[{ href: "/applications", label: "Application list" }, { label: application.number }]}
         title={customer.name}
         lede={lede ?? `${application.number} · ${application.loanType} · ${aed(application.amount)}`}
         actions={actions ?? <ButtonLink href={step.href}>{step.label}</ButtonLink>}

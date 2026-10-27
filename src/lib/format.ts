@@ -31,6 +31,12 @@ export function formatWhen(value?: string) {
   }).format(date);
 }
 
+export function auditResult(event: { detail?: string; previous?: string; next?: string }) {
+  if (event.detail) return event.detail;
+  if (event.previous && event.next) return `${event.previous} to ${event.next}`;
+  return "Completed";
+}
+
 export function todayKey(date = new Date()) {
   const y = date.getFullYear();
   const m = String(date.getMonth() + 1).padStart(2, "0");

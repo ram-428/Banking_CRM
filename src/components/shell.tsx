@@ -87,6 +87,22 @@ function NavIcon({ href }: { href: string }) {
       </svg>
     );
   }
+  if (href === "/vat-returns") {
+    return (
+      <svg {...props}>
+        <path d="M6 3h9l3 3v15H6z" />
+        <path d="M15 3v3h3M8 12h8M8 16h5" />
+      </svg>
+    );
+  }
+  if (href === "/audit-reports") {
+    return (
+      <svg {...props}>
+        <path d="M8 3h8v4H8zM6 7h12v14H6z" />
+        <path d="M9 12h6M9 16h4" />
+      </svg>
+    );
+  }
   if (href === "/users") {
     return (
       <svg {...props}>
@@ -104,7 +120,23 @@ function NavIcon({ href }: { href: string }) {
       </svg>
     );
   }
-  if (href === "/documents") {
+  if (href === "/customer") {
+    return (
+      <svg {...props}>
+        <path d="M4 5h16v12H4z" />
+        <path d="M8 21h8M12 17v4" />
+      </svg>
+    );
+  }
+  if (href === "/customers") {
+    return (
+      <svg {...props}>
+        <path d="M3 21h18M6 21V5l6-3 6 3v16" />
+        <path d="M10 21v-5h4v5M9 9h.01M15 9h.01M9 13h.01M15 13h.01" />
+      </svg>
+    );
+  }
+  if (href.startsWith("/documents") || href === "/versions" || href === "/ai-results" || href === "/agreements") {
     return (
       <svg {...props}>
         <path d="M3 7a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
@@ -123,15 +155,28 @@ const CRUMB: Record<string, string> = {
   dashboard: "Dashboard",
   tasks: "My tasks",
   "follow-ups": "Follow-ups",
-  leads: "Leads",
-  applications: "Applications",
-  customers: "Customers",
-  verification: "Verification",
+  leads: "Lead list",
+  applications: "Application list",
+  customers: "Customer profiles",
+  verification: "Verification queue",
   financials: "Financial profiles",
-  users: "Users",
-  roles: "Roles",
+  statements: "Bank statement analysis",
+  "vat-returns": "VAT returns",
+  "audit-reports": "Audit reports",
+  "credit-reviews": "Credit review",
+  "bank-submissions": "Bank submissions",
+  "bank-responses": "Bank responses",
+  disbursements: "Disbursements",
+  "ai-results": "AI results",
+  versions: "Version history",
+  workflow: "Workflow dashboard",
+  "task-assignment": "Task assignment",
+  agreements: "Agreement tracking",
+  closures: "Application closure",
+  users: "User list",
+  roles: "Role permissions",
   documents: "Document master",
-  audit: "Audit history",
+  audit: "Activity log",
   profile: "Profile",
   new: "New",
   checklist: "Checklist",
@@ -143,6 +188,19 @@ const CRUMB: Record<string, string> = {
   close: "Closure",
 };
 
+function navCurrent(pathname: string, search: string, href: string) {
+  const [path, query = ""] = href.split("?");
+  if (path === "/documents") {
+    if (pathname !== "/documents") return false;
+    const tab = new URLSearchParams(search).get("tab") ?? "categories";
+    const wanted = new URLSearchParams(query).get("tab") ?? "categories";
+    return tab === wanted;
+  }
+  if (pathname === path) return true;
+  if (path === "/dashboard") return false;
+  return pathname.startsWith(`${path}/`);
+}
+
 function crumbLabel(segment: string) {
   if (CRUMB[segment]) return CRUMB[segment];
   if (/^[A-Za-z]{1,6}-?\d/.test(segment) || segment.length > 10) return "Details";
@@ -153,6 +211,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
   const { state, replace, reset, user, ready } = useDesk();
   const pathname = usePathname();
   const router = useRouter();
+  const [search, setSearch] = useState("");
   const [open, setOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
   const [closedGroups, setClosedGroups] = useState<Record<string, boolean>>({});
@@ -164,8 +223,19 @@ export function Shell({ children }: { children: React.ReactNode }) {
   }, []);
 
   useEffect(() => {
-    if (ready && !user) router.replace("/");
-  }, [ready, user, router]);
+    const read = () => setSearch(window.location.search.replace(/^\?/, ""));
+    read();
+    window.addEventListener("popstate", read);
+    window.addEventListener("vrw-nav", read);
+    return () => {
+      window.removeEventListener("popstate", read);
+      window.removeEventListener("vrw-nav", read);
+    };
+  }, [pathname]);
+
+  useEffect(() => {
+    if (state && !user) router.replace("/");
+  }, [state, user, router]);
 
   useEffect(() => {
     setOpen(false);
@@ -236,21 +306,23 @@ export function Shell({ children }: { children: React.ReactNode }) {
           {groups.map((group) => {
             const closed = closedGroups[group.section] === true;
             return (
-              <div key={group.section} className={closed ? "nav-group is-closed" : "nav-group"}>
-                <button
-                  className="nav-section"
-                  type="button"
-                  aria-expanded={!closed}
-                  onClick={() => setClosedGroups((current) => ({ ...current, [group.section]: !closed }))}
-                >
-                  <span>{group.section}</span>
-                  <svg className="nav-caret" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
-                    <path d="M6 9l6 6 6-6" />
-                  </svg>
-                </button>
+              <div key={group.section || group.items[0]?.href} className={closed ? "nav-group is-closed" : "nav-group"}>
+                {group.section ? (
+                  <button
+                    className="nav-section"
+                    type="button"
+                    aria-expanded={!closed}
+                    onClick={() => setClosedGroups((current) => ({ ...current, [group.section]: !closed }))}
+                  >
+                    <span>{group.section}</span>
+                    <svg className="nav-caret" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+                      <path d="M6 9l6 6 6-6" />
+                    </svg>
+                  </button>
+                ) : null}
                 <div className="nav-links">
                   {group.items.map((item) => {
-                    const current = pathname === item.href || (item.href !== "/dashboard" && pathname.startsWith(item.href));
+                    const current = navCurrent(pathname, search, item.href);
                     return (
                       <Link key={item.href} href={item.href} className="nav-link" aria-current={current ? "page" : undefined} title={item.label}>
                         <span className="nav-ico">
@@ -344,8 +416,8 @@ export function Shell({ children }: { children: React.ReactNode }) {
               </button>
               {menu === "user" && (
                 <div className="menu">
-                  <Link href="/profile">Profile and activity</Link>
-                  <Link href="/portal">Customer portal</Link>
+                  <Link href="/profile">Profile and activity log</Link>
+                  <Link href="/customer">Customer</Link>
                   <button
                     className="menu-item"
                     type="button"

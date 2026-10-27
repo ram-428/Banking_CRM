@@ -2,7 +2,7 @@
 
 import { useParams } from "next/navigation";
 import { useState } from "react";
-import { Button, Field, Gate, PageHeader, StatusText, Tabs } from "@/components/ui";
+import { Button, Field, Gate, PageHeader, StatusText, Tabs, DataTable } from "@/components/ui";
 import { userName } from "@/lib/access";
 import { finalizeStatements, updateCustomer } from "@/lib/actions";
 import { BANKS } from "@/lib/constants";
@@ -80,7 +80,7 @@ export default function FinancialProfilePage() {
               ))}
             </ul>
             <h2 className="block-title">Existing exposure</h2>
-            <table className="data">
+            <DataTable>
               <thead>
                 <tr>
                   <th>Bank</th>
@@ -99,7 +99,7 @@ export default function FinancialProfilePage() {
                   </tr>
                 ))}
               </tbody>
-            </table>
+            </DataTable>
             <div className="fields" style={{ marginTop: 12 }}>
               <Field label="Bank">
                 <select value={bank} onChange={(event) => setBank(event.target.value)}>
@@ -139,7 +139,7 @@ export default function FinancialProfilePage() {
         {tab === "VAT" && (
           <div>
             <p>VAT certificate: {customer.vatCertificate}</p>
-            <table className="data">
+            <DataTable>
               <thead>
                 <tr>
                   <th>Period</th>
@@ -163,7 +163,7 @@ export default function FinancialProfilePage() {
                   </tr>
                 )}
               </tbody>
-            </table>
+            </DataTable>
           </div>
         )}
         {tab === "Statements" && (

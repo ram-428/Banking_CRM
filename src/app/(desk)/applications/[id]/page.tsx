@@ -4,9 +4,10 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { ApplicationFrame } from "@/components/application-frame";
 import { can } from "@/lib/access";
-import { aed, formatDate } from "@/lib/format";
-import { deliveredTotal } from "@/lib/metrics";
+import { aed, formatDate, formatWhen } from "@/lib/format";
+import { captureSnapshot, deliveredTotal } from "@/lib/metrics";
 import { useDesk } from "@/lib/store";
+import type { Application, Customer } from "@/lib/types";
 
 export default function ApplicationPage() {
   const { id } = useParams<{ id: string }>();
@@ -54,34 +55,9 @@ export default function ApplicationPage() {
             Financial snapshot
           </h2>
           <p className="hint" style={{ marginBottom: 10 }}>
-            Read from {app.snapshotLabel}. Figures are not retyped on the application.
+            {app.snapshotLabel}. These figures stay with this application.
           </p>
-          <dl className="facts">
-            <div>
-              <dt>Sales turnover</dt>
-              <dd>{aed(customer.salesTurnover)}</dd>
-            </div>
-            <div>
-              <dt>Bank turnover</dt>
-              <dd>{aed(customer.bankTurnover)}</dd>
-            </div>
-            <div>
-              <dt>Average balance, 6 months</dt>
-              <dd>{aed(customer.avgBalance6)}</dd>
-            </div>
-            <div>
-              <dt>Employees</dt>
-              <dd>{customer.employees ?? "Not set"}</dd>
-            </div>
-            <div>
-              <dt>Cheque bounce</dt>
-              <dd>{customer.chequeBounce}</dd>
-            </div>
-            <div>
-              <dt>Audit</dt>
-              <dd>{customer.auditAvailable}</dd>
-            </div>
-          </dl>
+          <FinancialSnapshot app={app} customer={customer} />
         </section>
         <aside>
           <h2 className="block-title">Move the file</h2>
@@ -112,5 +88,67 @@ export default function ApplicationPage() {
         </aside>
       </div>
     </ApplicationFrame>
+  );
+}
+
+function FinancialSnapshot({ app, customer }: { app: Application; customer: Customer }) {
+  const snap = app.snapshot ?? captureSnapshot(customer, app.createdAt);
+  return (
+    <dl className="facts">
+      <div>
+        <dt>Company turnover</dt>
+        <dd>{aed(snap.salesTurnover)}</dd>
+      </div>
+      <div>
+        <dt>Bank turnover</dt>
+        <dd>{aed(snap.bankTurnover)}</dd>
+      </div>
+      <div>
+        <dt>POS turnover</dt>
+        <dd>{aed(snap.posTurnover)}</dd>
+      </div>
+      <div>
+        <dt>Average balance, 6 months</dt>
+        <dd>{aed(snap.avgBalance6)}</dd>
+      </div>
+      <div>
+        <dt>Average balance, 12 months</dt>
+        <dd>{aed(snap.avgBalance12)}</dd>
+      </div>
+      <div>
+        <dt>VAT returns</dt>
+        <dd>{snap.vatSummary}</dd>
+      </div>
+      <div>
+        <dt>Existing bank exposure</dt>
+        <dd>{snap.exposureSummary}</dd>
+      </div>
+      <div>
+        <dt>Employees</dt>
+        <dd>{snap.employees ?? "Not set"}</dd>
+      </div>
+      <div>
+        <dt>Cheque bounce</dt>
+        <dd>
+          {snap.chequeBounce}
+          {snap.bounceCount ? ` · ${snap.bounceCount} record${snap.bounceCount === 1 ? "" : "s"}` : ""}
+        </dd>
+      </div>
+      <div>
+        <dt>Audit report</dt>
+        <dd>
+          {snap.auditAvailable}
+          {snap.auditYears !== "None recorded" ? ` · ${snap.auditYears}` : ""}
+        </dd>
+      </div>
+      <div>
+        <dt>Profile version</dt>
+        <dd>{snap.profileStatus}</dd>
+      </div>
+      <div>
+        <dt>Snapshot date</dt>
+        <dd>{formatWhen(snap.capturedAt)}</dd>
+      </div>
+    </dl>
   );
 }

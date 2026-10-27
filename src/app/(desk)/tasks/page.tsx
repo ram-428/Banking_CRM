@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Button, Field, Gate, PageHeader, StatusText } from "@/components/ui";
+import { Button, Field, Gate, PageHeader, StatusText, DataTable } from "@/components/ui";
 import { userName } from "@/lib/access";
 import { saveTask } from "@/lib/actions";
 import { STAGES } from "@/lib/constants";
@@ -70,7 +70,7 @@ export default function TasksPage() {
             </button>
           ))}
         </div>
-        <table className="data">
+        <DataTable>
           <thead>
             <tr>
               <th>Task</th>
@@ -135,7 +135,7 @@ export default function TasksPage() {
               </tr>
             )}
           </tbody>
-        </table>
+        </DataTable>
         <section className="form-section">
           <h2>Assign a task</h2>
           {error && <div className="banner banner-danger">{error}</div>}

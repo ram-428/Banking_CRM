@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { FormDialog } from "@/components/form-dialog";
 import { Button, Field } from "@/components/ui";
 import { createApplication } from "@/lib/actions";
-import { BANKS, LOAN_TYPES } from "@/lib/constants";
+import { BANKS, LEAD_SOURCES, LOAN_TYPES } from "@/lib/constants";
 import { useDesk } from "@/lib/store";
 
 export function CreateApplicationDialog({
@@ -27,8 +27,10 @@ export function CreateApplicationDialog({
   const [amount, setAmount] = useState("");
   const [purpose, setPurpose] = useState("");
   const [banks, setBanks] = useState<string[]>([]);
+  const [otherBank, setOtherBank] = useState("");
   const [tenure, setTenure] = useState("");
   const [financingDate, setFinancingDate] = useState("");
+  const [source, setSource] = useState("");
   const [channel, setChannel] = useState("");
   const [remarks, setRemarks] = useState("");
   const [error, setError] = useState("");
@@ -43,8 +45,10 @@ export function CreateApplicationDialog({
     setAmount("");
     setPurpose("");
     setBanks([]);
+    setOtherBank("");
     setTenure("");
     setFinancingDate("");
+    setSource("");
     setChannel("");
     setRemarks("");
     setError("");
@@ -71,21 +75,27 @@ export function CreateApplicationDialog({
       setError("Select an existing customer.");
       return;
     }
-    if (!purpose.trim() || !amount || Number(amount) <= 0) {
-      setError("Loan type, amount, and purpose are required.");
+    if (!purpose.trim() || !amount || Number(amount) <= 0 || !salesId) {
+      setError("Sales executive, loan type, amount, and purpose are required.");
       return;
     }
+    if (banks.includes("Other") && !otherBank.trim()) {
+      setError("Enter the other bank name, or clear that choice.");
+      return;
+    }
+    const preferredBanks = banks.flatMap((item) => (item === "Other" ? [otherBank.trim()] : [item]));
+    const channelName = [source, channel.trim()].filter(Boolean).join(" · ");
     const result = createApplication(
       state!,
       {
         customerId: customer.id,
         ownerContactId: contact.id,
         assignedTo: salesId,
-        channel,
+        channel: channelName,
         loanType,
         amount: Number(amount),
         purpose,
-        preferredBanks: banks,
+        preferredBanks,
         tenureMonths: tenure ? Number(tenure) : undefined,
         financingDate: financingDate || undefined,
         remarks,
@@ -174,6 +184,9 @@ export function CreateApplicationDialog({
       <section className="form-section">
         <h2>Loan requirement</h2>
         <div className="fields">
+          <Field label="Application date" hint="Set when the file is saved.">
+            <input value={new Date().toISOString().slice(0, 10)} readOnly />
+          </Field>
           <Field label="Lending service" required>
             <input value="Lending Assistance" readOnly />
           </Field>
@@ -211,13 +224,26 @@ export function CreateApplicationDialog({
               ))}
             </div>
           </Field>
+          {banks.includes("Other") && (
+            <Field label="Other bank name" required>
+              <input placeholder="Enter the bank name" value={otherBank} onChange={(event) => setOtherBank(event.target.value)} />
+            </Field>
+          )}
           <Field label="Expected tenure (months)">
             <input placeholder="Enter the tenure" value={tenure} onChange={(event) => setTenure(event.target.value)} inputMode="numeric" />
           </Field>
           <Field label="Required financing date">
             <input type="date" value={financingDate} onChange={(event) => setFinancingDate(event.target.value)} />
           </Field>
-          <Field label="Channel">
+          <Field label="Lead source">
+            <select value={source} onChange={(event) => setSource(event.target.value)}>
+              <option value="">Select</option>
+              {LEAD_SOURCES.map((item) => (
+                <option key={item}>{item}</option>
+              ))}
+            </select>
+          </Field>
+          <Field label="Channel name">
             <input placeholder="Enter the channel" value={channel} onChange={(event) => setChannel(event.target.value)} />
           </Field>
           <Field label="Remarks" className="span-2">

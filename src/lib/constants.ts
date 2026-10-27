@@ -1,4 +1,4 @@
-import type { ModuleKey, PermFlags, Stage, UserRole } from "./types";
+import type { ModuleKey, PermFlags, RuleStage, Stage, UserRole } from "./types";
 
 export const STAGES: Stage[] = [
   "Lead Qualification",
@@ -56,6 +56,12 @@ export const LOBS = [
   "Professional services",
 ];
 
+export const COUNTRIES = ["United Arab Emirates", "Saudi Arabia", "Oman", "Qatar", "Bahrain", "Kuwait", "India", "Other"];
+
+export const LEAD_SOURCES = ["Referral", "Walk-in", "Website", "Partner", "Existing customer", "Campaign", "Other"];
+
+export const NATIONALITIES = ["United Arab Emirates", "India", "Pakistan", "Egypt", "Philippines", "United Kingdom", "Jordan", "Other"];
+
 export const LEAD_STATUSES = [
   "New",
   "Contacted",
@@ -64,6 +70,16 @@ export const LEAD_STATUSES = [
   "On Hold",
   "Converted",
   "Lost",
+] as const;
+
+export const SUBMISSION_STATUSES = [
+  "Draft",
+  "Submitted",
+  "Under Bank Review",
+  "Additional Documents Required",
+  "Approved",
+  "Rejected",
+  "Withdrawn",
 ] as const;
 
 export const APP_STATUSES = [
@@ -81,6 +97,12 @@ export const APP_STATUSES = [
   "On Hold",
   "Withdrawn",
 ] as const;
+
+export const FILE_TYPES = ["pdf", "jpg", "png", "docx", "xlsx"];
+
+export const REMINDER_DAYS = [7, 14, 30, 60, 90];
+
+export const RULE_STAGES: RuleStage[] = ["collection", "financial review", "credit review", "bank approval", "agreement"];
 
 export const REJECTION_REASONS = [
   "Incorrect",
@@ -137,35 +159,73 @@ export const STAGE_HREF: Record<Stage, (appId: string, customerCode?: string) =>
 
 export const NAV: { section: string; items: { href: string; label: string; module: ModuleKey }[] }[] = [
   {
-    section: "Work",
+    section: "",
+    items: [{ href: "/dashboard", label: "Dashboard", module: "Applications" }],
+  },
+  {
+    section: "Customer and Lead Management",
     items: [
-      { href: "/dashboard", label: "Dashboard", module: "Applications" },
-      { href: "/tasks", label: "My tasks", module: "Tasks" },
-      { href: "/follow-ups", label: "Follow-ups", module: "Leads" },
+      { href: "/leads", label: "Lead list", module: "Leads" },
+      { href: "/customers", label: "Customer profiles", module: "Leads" },
     ],
   },
   {
-    section: "Pipeline",
+    section: "Lending Application Management",
     items: [
-      { href: "/leads", label: "Leads", module: "Leads" },
-      { href: "/applications", label: "Applications", module: "Applications" },
+      { href: "/applications", label: "Application list", module: "Applications" },
+      { href: "/bank-submissions", label: "Bank submissions", module: "Banks" },
+      { href: "/bank-responses", label: "Bank responses", module: "Banks" },
+      { href: "/disbursements", label: "Disbursements", module: "Applications" },
     ],
   },
   {
-    section: "Review",
+    section: "Document Master and Checklist Configuration",
     items: [
-      { href: "/verification", label: "Verification", module: "Verification" },
+      { href: "/documents", label: "Document categories", module: "Documents" },
+      { href: "/documents?tab=documents", label: "Document master", module: "Documents" },
+      { href: "/documents?tab=rules", label: "Checklist configuration", module: "Documents" },
+      { href: "/verification", label: "Verification queue", module: "Verification" },
+      { href: "/ai-results", label: "AI results", module: "Verification" },
+      { href: "/versions", label: "Version history", module: "Verification" },
+    ],
+  },
+  {
+    section: "Financial Information",
+    items: [
       { href: "/financials", label: "Financial profiles", module: "Financials" },
+      { href: "/statements", label: "Bank statement analysis", module: "Financials" },
+      { href: "/vat-returns", label: "VAT returns", module: "Financials" },
+      { href: "/audit-reports", label: "Audit reports", module: "Financials" },
+      { href: "/credit-reviews", label: "Credit review", module: "Credit" },
     ],
   },
   {
-    section: "Control",
+    section: "Workflow and Tasks",
     items: [
-      { href: "/users", label: "Users", module: "Users" },
-      { href: "/roles", label: "Roles", module: "Users" },
-      { href: "/documents", label: "Document master", module: "Documents" },
-      { href: "/audit", label: "Audit history", module: "Audit" },
+      { href: "/workflow", label: "Workflow dashboard", module: "Applications" },
+      { href: "/tasks", label: "My tasks", module: "Tasks" },
+      { href: "/task-assignment", label: "Task assignment", module: "Tasks" },
+      { href: "/follow-ups", label: "Customer follow-ups", module: "Leads" },
     ],
+  },
+  {
+    section: "Agreements and Closure",
+    items: [
+      { href: "/agreements", label: "Agreement tracking", module: "Banks" },
+      { href: "/closures", label: "Application closure", module: "Applications" },
+    ],
+  },
+  {
+    section: "Administration",
+    items: [
+      { href: "/users", label: "User list", module: "Users" },
+      { href: "/roles", label: "Role permissions", module: "Users" },
+      { href: "/audit", label: "Activity log", module: "Audit" },
+    ],
+  },
+  {
+    section: "",
+    items: [{ href: "/customer", label: "Customer", module: "Applications" }],
   },
 ];
 

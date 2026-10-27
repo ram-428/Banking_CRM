@@ -115,9 +115,25 @@ export type Shareholder = {
   residency: string;
 };
 
-export type BankRelationship = { id: string; bank: string };
-export type Exposure = { id: string; bank: string; facility: string; value: number; emi: number };
-export type VatReturn = { id: string; from: string; to: string; amount: number; status: string };
+export type BankRelationship = {
+  id: string;
+  bank: string;
+  relationshipType?: string;
+  account?: string;
+  status?: string;
+};
+export type Exposure = {
+  id: string;
+  bank: string;
+  facility: string;
+  value: number;
+  emi: number;
+  startDate?: string;
+  endDate?: string;
+  status?: string;
+  document?: string;
+};
+export type VatReturn = { id: string; from: string; to: string; amount: number; status: string; attachment?: string; remarks?: string };
 export type AuditYear = {
   id: string;
   year: string;
@@ -126,6 +142,8 @@ export type AuditYear = {
   profit?: number;
   assets?: number;
   liabilities?: number;
+  attachment?: string;
+  remarks?: string;
 };
 export type ChequeBounce = { id: string; date: string; amount: number; status: string; remarks: string };
 
@@ -177,7 +195,9 @@ export type Customer = {
   amendmentDates: string[];
   poa?: string;
   vatCertificate: "Yes" | "No";
+  vatDocument?: string;
   corporateCertificate: "Yes" | "No";
+  corporateDocument?: string;
   salesTurnover?: number;
   salesPeriod?: string;
   posTurnover?: number;
@@ -230,6 +250,7 @@ export type Application = {
   tenureMonths?: number;
   financingDate?: string;
   remarks?: string;
+  snapshot?: ProfileSnapshot;
   status: AppStatus;
   currentStage: Stage;
   stageStatus: StageStatus;
@@ -342,6 +363,25 @@ export type Delivery = {
   remarks?: string;
   recordedBy: string;
   recordedAt: string;
+  updatedAt?: string;
+  updatedBy?: string;
+};
+
+export type ProfileSnapshot = {
+  salesTurnover?: number;
+  bankTurnover?: number;
+  posTurnover?: number;
+  avgBalance6?: number;
+  avgBalance12?: number;
+  employees?: number;
+  chequeBounce: "Yes" | "No";
+  bounceCount: number;
+  auditAvailable: "Yes" | "No";
+  auditYears: string;
+  vatSummary: string;
+  exposureSummary: string;
+  profileStatus: string;
+  capturedAt: string;
 };
 
 export type Agreement = {
@@ -353,7 +393,7 @@ export type Agreement = {
   recipientNames: string[];
   sentAt?: string;
   signedAt?: string;
-  status: "Draft" | "Sent" | "Viewed" | "Partially Signed" | "Completed" | "Declined" | "Expired" | "Failed";
+  status: "Draft" | "Sent" | "Viewed" | "Partially Signed" | "Signed" | "Completed" | "Declined" | "Expired" | "Failed";
   envelopeId?: string;
   remarks?: string;
   error?: string;

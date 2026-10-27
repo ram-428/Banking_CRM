@@ -5,7 +5,7 @@ import { useState } from "react";
 import { ApplicationFrame, useRecord } from "@/components/application-frame";
 import { Button, Field, Gate, StatusText } from "@/components/ui";
 import { addSubmission, updateSubmission } from "@/lib/actions";
-import { BANKS, LOAN_TYPES } from "@/lib/constants";
+import { BANKS, LOAN_TYPES, SUBMISSION_STATUSES } from "@/lib/constants";
 import { aed, formatDate } from "@/lib/format";
 import { submissionBlockers } from "@/lib/metrics";
 import { useDesk } from "@/lib/store";
@@ -23,8 +23,24 @@ export default function BanksPage() {
   const [date, setDate] = useState("2026-10-26");
   const [branch, setBranch] = useState("");
   const [manager, setManager] = useState("");
+  const [phone, setPhone] = useState("");
+  const [email, setEmail] = useState("");
+  const [documentsNote, setDocumentsNote] = useState("");
+  const [status, setStatus] = useState<BankSubmission["status"]>("Submitted");
+  const [remarks, setRemarks] = useState("");
   const [override, setOverride] = useState("");
   const [error, setError] = useState("");
+  const [response, setResponse] = useState({
+    date: "",
+    status: "Under Bank Review" as BankSubmission["status"],
+    approvedAmount: "",
+    rate: "",
+    tenure: "",
+    emi: "",
+    offerNote: "",
+    additionalRequest: "",
+    remarks: "",
+  });
 
   if (!state || !user || !application) return <ApplicationFrame id={id}> </ApplicationFrame>;
   const rows = state.submissions.filter((item) => item.applicationId === id);
@@ -43,9 +59,14 @@ export default function BanksPage() {
         bank: name,
         branch,
         manager,
+        phone,
+        email,
+        documentsNote,
+        remarks,
         submittedOn: date,
         amount: Number(amount),
         loanType,
+        status,
         overrideReason: override,
       },
       user!,
@@ -61,20 +82,36 @@ export default function BanksPage() {
     setOverride("");
   }
 
-  function respond(row: BankSubmission, status: BankSubmission["status"], approvedAmount?: number) {
+  function respond(row: BankSubmission) {
+    if (!response.date || !response.status) {
+      setError("Response date and status are required.");
+      return;
+    }
+    if (response.status === "Approved" && (!response.approvedAmount || Number(response.approvedAmount) <= 0)) {
+      setError("An approved response needs the approved loan amount.");
+      return;
+    }
     replace(
       updateSubmission(
         state!,
         row.id,
         {
-          status,
-          responseDate: "2026-10-26",
-          responseStatus: status,
-          approvedAmount,
+          status: response.status,
+          responseDate: response.date,
+          responseStatus: response.status,
+          approvedAmount: response.approvedAmount ? Number(response.approvedAmount) : undefined,
+          rate: response.rate ? Number(response.rate) : undefined,
+          tenure: response.tenure ? Number(response.tenure) : undefined,
+          emi: response.emi ? Number(response.emi) : undefined,
+          offerNote: response.offerNote,
+          additionalRequest: response.additionalRequest,
+          remarks: response.remarks || row.remarks,
         },
         user!,
       ),
     );
+    setError("");
+    setOpen(null);
   }
 
   return (
@@ -126,6 +163,25 @@ export default function BanksPage() {
           <Field label="Relationship manager">
             <input value={manager} onChange={(event) => setManager(event.target.value)} />
           </Field>
+          <Field label="Bank phone">
+            <input value={phone} onChange={(event) => setPhone(event.target.value)} />
+          </Field>
+          <Field label="Bank email">
+            <input value={email} onChange={(event) => setEmail(event.target.value)} />
+          </Field>
+          <Field label="Submission status" required>
+            <select value={status} onChange={(event) => setStatus(event.target.value as BankSubmission["status"])}>
+              {SUBMISSION_STATUSES.map((item) => (
+                <option key={item}>{item}</option>
+              ))}
+            </select>
+          </Field>
+          <Field label="Supporting documents" className="span-2">
+            <textarea value={documentsNote} onChange={(event) => setDocumentsNote(event.target.value)} placeholder="Document references for this submission" />
+          </Field>
+          <Field label="Remarks" className="span-2">
+            <textarea value={remarks} onChange={(event) => setRemarks(event.target.value)} />
+          </Field>
           {blockers.length > 0 && (
             <Field label="Override reason" className="span-2" hint="Required only when checks are still open.">
               <textarea value={override} onChange={(event) => setOverride(event.target.value)} />
@@ -164,17 +220,41 @@ export default function BanksPage() {
             {open === row.id ? "Hide response" : "Record response"}
           </button>
           {open === row.id && (
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 8 }}>
-              <Button variant="secondary" onClick={() => respond(row, "Under Bank Review")}>
-                Under review
-              </Button>
-              <Button variant="secondary" onClick={() => respond(row, "Additional Documents Required")}>
-                More documents
-              </Button>
-              <Button onClick={() => respond(row, "Approved", row.amount)}>Mark approved</Button>
-              <Button variant="danger" onClick={() => respond(row, "Rejected")}>
-                Mark rejected
-              </Button>
+            <div className="fields" style={{ marginTop: 12 }}>
+              <Field label="Response date" required>
+                <input type="date" value={response.date} onChange={(event) => setResponse({ ...response, date: event.target.value })} />
+              </Field>
+              <Field label="Response status" required>
+                <select value={response.status} onChange={(event) => setResponse({ ...response, status: event.target.value as BankSubmission["status"] })}>
+                  {SUBMISSION_STATUSES.map((item) => (
+                    <option key={item}>{item}</option>
+                  ))}
+                </select>
+              </Field>
+              <Field label="Approved loan amount (AED)" required={response.status === "Approved"}>
+                <input value={response.approvedAmount} onChange={(event) => setResponse({ ...response, approvedAmount: event.target.value })} />
+              </Field>
+              <Field label="Approved interest / profit rate (%)">
+                <input value={response.rate} onChange={(event) => setResponse({ ...response, rate: event.target.value })} />
+              </Field>
+              <Field label="Approved tenure (months)">
+                <input value={response.tenure} onChange={(event) => setResponse({ ...response, tenure: event.target.value })} />
+              </Field>
+              <Field label="Approved EMI (AED)">
+                <input value={response.emi} onChange={(event) => setResponse({ ...response, emi: event.target.value })} />
+              </Field>
+              <Field label="Approval / offer letter" className="span-2">
+                <input value={response.offerNote} onChange={(event) => setResponse({ ...response, offerNote: event.target.value })} placeholder="Document reference" />
+              </Field>
+              <Field label="Additional document request" className="span-2" hint="Saving this adds a bank-specific checklist item.">
+                <textarea value={response.additionalRequest} onChange={(event) => setResponse({ ...response, additionalRequest: event.target.value })} />
+              </Field>
+              <Field label="Remarks" className="span-2">
+                <textarea value={response.remarks} onChange={(event) => setResponse({ ...response, remarks: event.target.value })} />
+              </Field>
+              <div className="span-2">
+                <Button onClick={() => respond(row)}>Save bank response</Button>
+              </div>
             </div>
           )}
         </article>

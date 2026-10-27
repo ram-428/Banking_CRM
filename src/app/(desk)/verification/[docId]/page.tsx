@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
-import { Button, Field, Gate, PageHeader, StatusText } from "@/components/ui";
+import { Button, Field, Gate, PageHeader, StatusText, DataTable } from "@/components/ui";
 import { userName } from "@/lib/access";
 import { correctAi, reviewDocument } from "@/lib/actions";
 import { REJECTION_REASONS } from "@/lib/constants";
@@ -202,7 +202,7 @@ export default function ReviewPage() {
         <h2 className="block-title" style={{ marginTop: 28 }}>
           Version history
         </h2>
-        <table className="data">
+        <DataTable>
           <thead>
             <tr>
               <th>Version</th>
@@ -229,7 +229,7 @@ export default function ReviewPage() {
               </tr>
             ))}
           </tbody>
-        </table>
+        </DataTable>
       </div>
     </Gate>
   );

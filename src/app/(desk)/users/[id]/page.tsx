@@ -37,9 +37,12 @@ export default function EditUserPage() {
   return (
     <Gate module="Users">
       <div className="page">
-        <PageHeader crumbs={[{ href: "/users", label: "Users" }, { label: person.name }]} title={person.name} actions={<StatusText value={person.status} />} />
+        <PageHeader crumbs={[{ href: "/users", label: "User list" }, { label: person.name }]} title={person.name} actions={<StatusText value={person.status} />} />
         {message && <div className="banner">{message}</div>}
         <div className="fields">
+          <Field label="User ID" hint="Assigned by the system and cannot be changed.">
+            <input value={person.id} readOnly />
+          </Field>
           <Field label="Full name" required>
             <input value={form.name} onChange={(event) => setDraft({ ...form, name: event.target.value })} />
           </Field>
@@ -66,6 +69,18 @@ export default function EditUserPage() {
               {state.roles.map((item) => (
                 <option key={item.id}>{item.name}</option>
               ))}
+            </select>
+          </Field>
+          <Field label="Reporting manager">
+            <select value={form.managerId ?? ""} onChange={(event) => setDraft({ ...form, managerId: event.target.value || undefined })}>
+              <option value="">None</option>
+              {state.users
+                .filter((item) => item.id !== person.id)
+                .map((item) => (
+                  <option key={item.id} value={item.id}>
+                    {item.name}
+                  </option>
+                ))}
             </select>
           </Field>
           <Field label="Status" required>

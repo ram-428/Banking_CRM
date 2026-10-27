@@ -1,9 +1,10 @@
 "use client";
 
+import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useState } from "react";
 import { ApplicationFrame, useRecord } from "@/components/application-frame";
-import { Button, Field, Gate } from "@/components/ui";
+import { Button, Field, Gate, DataTable } from "@/components/ui";
 import { userName } from "@/lib/access";
 import { addDelivery } from "@/lib/actions";
 import { aed, formatDate, formatWhen } from "@/lib/format";
@@ -19,6 +20,7 @@ export default function DeliveryPage() {
   const [date, setDate] = useState("2026-10-26");
   const [amount, setAmount] = useState("");
   const [ref, setRef] = useState("");
+  const [offerNote, setOfferNote] = useState("");
   const [remarks, setRemarks] = useState("");
   const [error, setError] = useState("");
 
@@ -34,7 +36,7 @@ export default function DeliveryPage() {
     replace(
       addDelivery(
         state!,
-        { applicationId: id, bank, loanType: application!.loanType, date, amount: Number(amount), profilingRef: ref, remarks },
+        { applicationId: id, bank, loanType: application!.loanType, date, amount: Number(amount), profilingRef: ref, offerNote, remarks },
         user!,
       ),
     );
@@ -56,8 +58,14 @@ export default function DeliveryPage() {
           <dd>{aed(deliveredTotal(state, id) || undefined)}</dd>
         </div>
         <div>
-          <dt>Folder</dt>
-          <dd>{customer.folderRef}</dd>
+          <dt>Document folder</dt>
+          <dd>
+            <Link href={`/customers/${customer.code}`}>{customer.folderRef}</Link>
+          </dd>
+        </div>
+        <div>
+          <dt>Owner / signatory</dt>
+          <dd>{customer.contacts.find((item) => item.id === application.ownerContactId)?.name ?? "None"}</dd>
         </div>
       </dl>
       {error && <div className="banner banner-danger">{error}</div>}
@@ -76,6 +84,12 @@ export default function DeliveryPage() {
         <Field label="Value of delivery (AED)" required>
           <input value={amount} onChange={(event) => setAmount(event.target.value)} />
         </Field>
+        <Field label="Type of loan">
+          <input value={application.loanType} readOnly />
+        </Field>
+        <Field label="Offer letter">
+          <input value={offerNote} onChange={(event) => setOfferNote(event.target.value)} placeholder="Document reference" />
+        </Field>
         <Field label="Profiling reference">
           <input value={ref} onChange={(event) => setRef(event.target.value)} />
         </Field>
@@ -86,13 +100,15 @@ export default function DeliveryPage() {
       <div style={{ margin: "12px 0 22px" }}>
         <Button onClick={save}>Record disbursement</Button>
       </div>
-      <table className="data">
+      <DataTable>
         <thead>
           <tr>
             <th>Date</th>
             <th>Bank</th>
+            <th>Loan type</th>
             <th>Value</th>
             <th>Recorded</th>
+            <th>Last modified</th>
           </tr>
         </thead>
         <tbody>
@@ -103,20 +119,25 @@ export default function DeliveryPage() {
                 {row.bank}
                 <div className="hint">{row.remarks}</div>
               </td>
+              <td>{row.loanType}</td>
               <td className="num">{aed(row.amount)}</td>
               <td>
                 {userName(state, row.recordedBy)}
                 <div className="hint">{formatWhen(row.recordedAt)}</div>
               </td>
+              <td>
+                {userName(state, row.updatedBy || row.recordedBy)}
+                <div className="hint">{formatWhen(row.updatedAt || row.recordedAt)}</div>
+              </td>
             </tr>
           ))}
           {rows.length === 0 && (
             <tr>
-              <td colSpan={4}>No funds have been recorded.</td>
+              <td colSpan={6}>No funds have been recorded.</td>
             </tr>
           )}
       </tbody>
-    </table>
+    </DataTable>
     </ApplicationFrame>
     </Gate>
   );

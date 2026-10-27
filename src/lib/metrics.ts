@@ -1,5 +1,5 @@
 import { STAGES } from "./constants";
-import type { Application, ChecklistItem, Stage, State } from "./types";
+import type { AppStatus, Application, BankSubmission, ChecklistItem, Customer, ProfileSnapshot, Stage, State } from "./types";
 
 const BLOCKING: ChecklistItem["stage"][] = ["collection", "financial review", "credit review"];
 
@@ -57,6 +57,75 @@ export function submissionBlockers(state: State, applicationId: string) {
 
 export function deliveredTotal(state: State, applicationId: string) {
   return state.deliveries.filter((row) => row.applicationId === applicationId).reduce((sum, row) => sum + row.amount, 0);
+}
+
+export function latestDeliveryDate(state: State, applicationId: string) {
+  const dates = state.deliveries.filter((row) => row.applicationId === applicationId).map((row) => row.date);
+  return dates.sort().at(-1);
+}
+
+const BANK_OPEN = new Set(["Draft", "Submitted", "Under Bank Review", "Additional Documents Required"]);
+
+export function rollUpStatus(current: AppStatus, submissions: Pick<BankSubmission, "status">[], hasDelivery: boolean): AppStatus {
+  if (current === "Closed") return "Closed";
+  if (hasDelivery) return "Disbursed";
+  if (submissions.length === 0) return current;
+  const statuses = submissions.map((item) => item.status);
+  const open = statuses.filter((item) => BANK_OPEN.has(item));
+  const approved = statuses.filter((item) => item === "Approved").length;
+  const rejected = statuses.filter((item) => item === "Rejected").length;
+  if (open.length === 0 && approved > 0) return "Approved";
+  if (open.length === 0 && rejected > 0) return "Rejected";
+  if (open.length === 0 && statuses.every((item) => item === "Withdrawn")) return "Withdrawn";
+  if (approved > 0) return "Bank Processing";
+  if (statuses.every((item) => item === "Draft")) return current;
+  if (open.some((item) => item === "Under Bank Review" || item === "Additional Documents Required")) return "Bank Processing";
+  return "Submitted to Bank";
+}
+
+export function applyBankRollup(app: Application, submissions: Pick<BankSubmission, "status">[], hasDelivery: boolean): Partial<Application> {
+  const status = rollUpStatus(app.status, submissions, hasDelivery);
+  const patch: Partial<Application> = { status };
+  if ((status === "Submitted to Bank" || status === "Bank Processing") && stageIndex(app.currentStage) < stageIndex("Bank Processing")) {
+    patch.currentStage = "Bank Processing";
+    patch.stageStatus = "In Progress";
+  }
+  if (status === "Approved" && stageIndex(app.currentStage) < stageIndex("Agreement")) {
+    patch.currentStage = "Agreement";
+    patch.stageStatus = "In Progress";
+  }
+  if (status === "Disbursed") {
+    patch.currentStage = "Loan Delivery";
+    patch.stageStatus = "In Progress";
+  }
+  if (status === "Rejected" || status === "Withdrawn") patch.stageStatus = "Completed";
+  return patch;
+}
+
+export function captureSnapshot(customer: Customer, capturedAt: string): ProfileSnapshot {
+  const vatSummary = customer.vatReturns.length
+    ? customer.vatReturns.map((row) => `${row.from || "Open"} to ${row.to || "Open"}`).join(", ")
+    : "None recorded";
+  const exposureSummary = customer.exposures.length
+    ? customer.exposures.map((row) => `${row.bank} ${row.facility}`).join(", ")
+    : "None recorded";
+  const auditYears = customer.audits.map((row) => row.year).filter(Boolean).join(", ") || "None recorded";
+  return {
+    salesTurnover: customer.salesTurnover,
+    bankTurnover: customer.bankTurnover,
+    posTurnover: customer.posTurnover,
+    avgBalance6: customer.avgBalance6,
+    avgBalance12: customer.avgBalance12,
+    employees: customer.employees,
+    chequeBounce: customer.chequeBounce,
+    bounceCount: customer.bounces.length,
+    auditAvailable: customer.auditAvailable,
+    auditYears,
+    vatSummary,
+    exposureSummary,
+    profileStatus: customer.profileStatus,
+    capturedAt,
+  };
 }
 
 export function profileSections(customer: {

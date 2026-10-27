@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Suspense, useState } from "react";
-import { DeskSkeleton, Gate, PageHeader, StatusText } from "@/components/ui";
+import { DeskSkeleton, Gate, PageHeader, StatusText, DataTable } from "@/components/ui";
 import { userName } from "@/lib/access";
 import { formatWhen } from "@/lib/format";
 import { useDesk } from "@/lib/store";
@@ -53,7 +53,7 @@ function Queue() {
               ))}
           </select>
         </div>
-        <table className="data">
+        <DataTable>
           <thead>
             <tr>
               <th>Document</th>
@@ -102,7 +102,7 @@ function Queue() {
               </tr>
             )}
           </tbody>
-        </table>
+        </DataTable>
       </div>
     </Gate>
   );

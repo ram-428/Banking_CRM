@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Button, Field, Gate, PageHeader, StatusText } from "@/components/ui";
+import { Button, Field, Gate, PageHeader, StatusText, DataTable } from "@/components/ui";
 import { userName } from "@/lib/access";
 import { saveFollowUp } from "@/lib/actions";
 import { formatWhen } from "@/lib/format";
@@ -113,7 +113,7 @@ export default function FollowUpsPage() {
         <div style={{ margin: "12px 0 24px" }}>
           <Button onClick={save}>Save follow-up</Button>
         </div>
-        <table className="data">
+        <DataTable>
           <thead>
             <tr>
               <th>When</th>
@@ -146,7 +146,7 @@ export default function FollowUpsPage() {
               );
             })}
           </tbody>
-        </table>
+        </DataTable>
       </div>
     </Gate>
   );

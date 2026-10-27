@@ -3,7 +3,7 @@
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { ApplicationFrame, useRecord } from "@/components/application-frame";
-import { Button, Field, Gate, StatusText } from "@/components/ui";
+import { Button, Field, Gate, StatusText, DataTable } from "@/components/ui";
 import { revokeInvitation, sendInvitation } from "@/lib/actions";
 import { formatWhen } from "@/lib/format";
 import { useDesk } from "@/lib/store";
@@ -89,14 +89,14 @@ export default function InvitePage() {
           variant="secondary"
           onClick={() => {
             replace({ ...state, portalEmail: email.toLowerCase() });
-            router.push("/portal/home");
+            router.push("/customer/home");
           }}
         >
           Preview as customer
         </Button>
       </div>
       <h2 className="block-title">Invitation history</h2>
-      <table className="data">
+      <DataTable>
         <thead>
           <tr>
             <th>Recipient</th>
@@ -133,7 +133,7 @@ export default function InvitePage() {
             </tr>
           )}
         </tbody>
-      </table>
+      </DataTable>
     </ApplicationFrame>
     </Gate>
   );

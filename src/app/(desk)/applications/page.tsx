@@ -4,11 +4,11 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { CreateApplicationDialog } from "@/components/create-application-dialog";
-import { Button, PageHeader, StatusText } from "@/components/ui";
+import { Button, PageHeader, StatusText, DataTable } from "@/components/ui";
 import { can, userName } from "@/lib/access";
-import { APP_STATUSES, LOAN_TYPES } from "@/lib/constants";
-import { aed, formatDate } from "@/lib/format";
-import { deliveredTotal } from "@/lib/metrics";
+import { APP_STATUSES, BANKS, LOAN_TYPES } from "@/lib/constants";
+import { aed, formatDate, formatWhen } from "@/lib/format";
+import { deliveredTotal, latestDeliveryDate } from "@/lib/metrics";
 import { useDesk } from "@/lib/store";
 
 export default function ApplicationsPage() {
@@ -18,6 +18,9 @@ export default function ApplicationsPage() {
   const [status, setStatus] = useState("All");
   const [loan, setLoan] = useState("All");
   const [sales, setSales] = useState("All");
+  const [bank, setBank] = useState("All");
+  const [from, setFrom] = useState("");
+  const [to, setTo] = useState("");
   const [adding, setAdding] = useState(false);
   const [preset, setPreset] = useState("");
 
@@ -32,25 +35,30 @@ export default function ApplicationsPage() {
     if (!state) return [];
     return state.applications.filter((app) => {
       const customer = state.customers.find((item) => item.id === app.customerId);
-      const blob = `${app.number} ${customer?.name ?? ""} ${customer?.code ?? ""} ${app.preferredBanks.join(" ")}`.toLowerCase();
+      const contact = customer?.contacts.find((item) => item.id === app.ownerContactId);
+      const submissions = state.submissions.filter((item) => item.applicationId === app.id);
+      const blob = `${app.number} ${customer?.name ?? ""} ${customer?.code ?? ""} ${contact?.name ?? ""} ${app.preferredBanks.join(" ")} ${submissions.map((item) => item.bank).join(" ")}`.toLowerCase();
       if (q && !blob.includes(q.toLowerCase())) return false;
       if (status !== "All" && app.status !== status) return false;
       if (loan !== "All" && app.loanType !== loan) return false;
       if (sales !== "All" && app.assignedTo !== sales) return false;
+      if (bank !== "All" && !submissions.some((item) => item.bank === bank) && !app.preferredBanks.includes(bank)) return false;
+      if (from && app.date < from) return false;
+      if (to && app.date > to) return false;
       return true;
     });
-  }, [state, q, status, loan, sales]);
+  }, [state, q, status, loan, sales, bank, from, to]);
 
   if (!state) return null;
 
   return (
     <div className="page">
-      <PageHeader
-        title="Applications"
-        lede="One company can hold several applications. Each bank submission keeps its own status."
-      />
+        <PageHeader
+          title="Application list"
+          lede="Search applications and review current progress. Overall status follows every bank on the file."
+        />
       <div className="filters">
-        <input aria-label="Search applications" placeholder="Search company, code, or application" value={q} onChange={(event) => setQ(event.target.value)} />
+        <input aria-label="Search applications" placeholder="Company, customer code, or application" value={q} onChange={(event) => setQ(event.target.value)} />
         <select aria-label="Status" value={status} onChange={(event) => setStatus(event.target.value)}>
           <option>All</option>
           {APP_STATUSES.map((item) => (
@@ -63,6 +71,14 @@ export default function ApplicationsPage() {
             <option key={item}>{item}</option>
           ))}
         </select>
+        <select aria-label="Bank" value={bank} onChange={(event) => setBank(event.target.value)}>
+          <option>All</option>
+          {BANKS.filter((item) => item !== "Other").map((item) => (
+            <option key={item}>{item}</option>
+          ))}
+        </select>
+        <input aria-label="From date" type="date" value={from} onChange={(event) => setFrom(event.target.value)} />
+        <input aria-label="To date" type="date" value={to} onChange={(event) => setTo(event.target.value)} />
         <select aria-label="Sales executive" value={sales} onChange={(event) => setSales(event.target.value)}>
           <option value="All">All sales</option>
           {state.users
@@ -86,16 +102,18 @@ export default function ApplicationsPage() {
           </Button>
         )}
       </div>
-      <table className="data">
+      <DataTable>
         <thead>
           <tr>
-            <th>Application</th>
-            <th>Company</th>
-            <th>Loan</th>
-            <th>Status</th>
-            <th>Banks</th>
-            <th>Delivered</th>
-            <th>Updated</th>
+            <th>Application number</th>
+            <th>Customer code / company</th>
+            <th>Owner / signatory</th>
+            <th>Assigned sales executive</th>
+            <th>Loan type / requested amount</th>
+            <th>Overall status</th>
+            <th>Banks / submission status</th>
+            <th>Delivered amount / date</th>
+            <th>Created / last modified</th>
           </tr>
         </thead>
         <tbody>
@@ -103,20 +121,20 @@ export default function ApplicationsPage() {
             const customer = state.customers.find((item) => item.id === app.customerId);
             const banks = state.submissions.filter((item) => item.applicationId === app.id);
             const contact = customer?.contacts.find((item) => item.id === app.ownerContactId);
+            const deliveredOn = latestDeliveryDate(state, app.id);
             return (
               <tr key={app.id}>
                 <td>
                   <Link className="link" href={`/applications/${app.id}`}>
                     {app.number}
                   </Link>
-                  <div className="hint">{userName(state, app.assignedTo)}</div>
                 </td>
                 <td>
-                  {customer?.name}
-                  <div className="hint">
-                    {customer?.code} · {contact?.name}
-                  </div>
+                  {customer?.code}
+                  <div className="hint">{customer?.name}</div>
                 </td>
+                <td>{contact?.name ?? "None"}</td>
+                <td>{userName(state, app.assignedTo)}</td>
                 <td>
                   {app.loanType}
                   <div className="hint num">{aed(app.amount)}</div>
@@ -126,24 +144,32 @@ export default function ApplicationsPage() {
                 </td>
                 <td>
                   {banks.length === 0 && "None yet"}
-                  {banks.map((bank) => (
-                    <div key={bank.id}>
-                      {bank.bank}: {bank.status}
+                  {banks.map((item) => (
+                    <div key={item.id}>
+                      {item.bank}: {item.status}
                     </div>
                   ))}
                 </td>
-                <td className="num">{aed(deliveredTotal(state, app.id) || undefined)}</td>
-                <td>{formatDate(app.updatedAt)}</td>
+                <td>
+                  {aed(deliveredTotal(state, app.id) || undefined)}
+                  <div className="hint">{deliveredOn ? formatDate(deliveredOn) : "Not delivered"}</div>
+                </td>
+                <td>
+                  {formatWhen(app.createdAt)}
+                  <div className="hint">
+                    {formatWhen(app.updatedAt)} · {userName(state, app.updatedBy)}
+                  </div>
+                </td>
               </tr>
             );
           })}
           {rows.length === 0 && (
             <tr>
-              <td colSpan={7}>No applications match these filters.</td>
+              <td colSpan={9}>No applications match these filters.</td>
             </tr>
           )}
         </tbody>
-      </table>
+      </DataTable>
         <CreateApplicationDialog
           open={adding}
           presetCustomerId={preset}

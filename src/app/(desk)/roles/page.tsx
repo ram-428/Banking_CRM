@@ -1,9 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { FormDialog } from "@/components/form-dialog";
 import { Button, Field, Gate, PageHeader, StatusText } from "@/components/ui";
-import { can } from "@/lib/access";
+import { can, isAdministrator } from "@/lib/access";
 import { createRole, updateRole } from "@/lib/actions";
 import { MODULES, PERM_KEYS } from "@/lib/constants";
 import { useDesk } from "@/lib/store";
@@ -18,8 +18,15 @@ const COPY: Record<ModuleKey, string> = {
   Banks: "Submissions, agreements, and delivery",
   Tasks: "Work assigned across the desk",
   Users: "Employee accounts and this role matrix",
-  Documents: "Document master and checklist rules",
+  Documents: "Document Master and Checklist Configuration",
   Audit: "The history of significant actions",
+};
+
+const SCOPE: Record<RoleConfig["scope"], string> = {
+  Own: "Own",
+  Assigned: "Assigned",
+  Department: "Department",
+  All: "All permitted records",
 };
 
 export default function RolesPage() {
@@ -31,16 +38,28 @@ export default function RolesPage() {
   const [slugEdited, setSlugEdited] = useState(false);
   const [description, setDescription] = useState("");
   const [error, setError] = useState("");
-  if (!state || !user) return null;
-  const role = state.roles.find((item) => item.id === roleId) ?? state.roles.find((item) => item.name === user.role) ?? state.roles[0];
+  const [roleName, setRoleName] = useState("");
+  const [roleDescription, setRoleDescription] = useState("");
+  const [roleError, setRoleError] = useState("");
+  const role = state?.roles.find((item) => item.id === roleId) ?? state?.roles.find((item) => item.name === user?.role) ?? state?.roles[0];
+
+  useEffect(() => {
+    if (!role) return;
+    setRoleName(role.name);
+    setRoleDescription(role.description);
+  }, [role?.id, role?.name, role?.description]);
+
+  if (!state || !user || !role) return null;
   const granted = MODULES.reduce((sum, module) => sum + PERM_KEYS.filter((key) => role.permissions[module][key]).length, 0);
   const total = MODULES.length * PERM_KEYS.length;
 
   function setFlags(module: ModuleKey, next: PermFlags) {
-    replace(updateRole(state!, role.id, { permissions: { ...role.permissions, [module]: next } }, user!));
+    if (!state || !user || !role) return;
+    replace(updateRole(state, role.id, { permissions: { ...role.permissions, [module]: next } }, user));
   }
 
   function toggle(module: ModuleKey, key: keyof PermFlags) {
+    if (!role) return;
     setFlags(module, { ...role.permissions[module], [key]: !role.permissions[module][key] });
   }
 
@@ -64,17 +83,57 @@ export default function RolesPage() {
     closeAdd();
   }
 
+  function commitName() {
+    if (!state || !user || !role) return;
+    const next = roleName.trim();
+    if (!next) {
+      setRoleError("Role name is required.");
+      setRoleName(role.name);
+      return;
+    }
+    if (next === role.name) return;
+    if (state.roles.some((item) => item.id !== role.id && item.name.toLowerCase() === next.toLowerCase())) {
+      setRoleError("A role with that name already exists.");
+      setRoleName(role.name);
+      return;
+    }
+    setRoleError("");
+    const renamed = updateRole(state, role.id, { name: next }, user);
+    replace({
+      ...renamed,
+      users: renamed.users.map((person) => (person.role === role.name ? { ...person, role: next } : person)),
+    });
+  }
+
+  function commitDescription() {
+    if (!state || !user || !role) return;
+    const next = roleDescription.trim();
+    if (next === role.description) return;
+    replace(updateRole(state, role.id, { description: next }, user));
+  }
+
   function toggleAll(module: ModuleKey) {
+    if (!role) return;
     const on = PERM_KEYS.every((key) => role.permissions[module][key]);
     const next = { ...role.permissions[module] };
     for (const key of PERM_KEYS) next[key] = !on;
     setFlags(module, next);
   }
 
+  if (!isAdministrator(state)) {
+    return (
+      <Gate module="Users">
+        <div className="page">
+          <PageHeader title="Role permissions" lede="Only Admin and Super Admin can configure roles and record scope." />
+        </div>
+      </Gate>
+    );
+  }
+
   return (
     <Gate module="Users">
       <div className="page">
-        <PageHeader title="Role permissions" lede="Open a role to grant actions on its modules. Checklist copies already on applications stay as they were." />
+        <PageHeader title="Role permissions" lede="Control access to modules and records. Checklist copies already on applications stay as they were." />
         <div className="role-split">
           <section className="role-card">
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}>
@@ -97,44 +156,38 @@ export default function RolesPage() {
                     {item.name}
                     {item.name === user.role && <span className="you">You</span>}
                   </strong>
-                  <span className="hint">{item.scope}</span>
+                  <span className="hint">{SCOPE[item.scope]}</span>
                 </span>
                 <StatusText value={item.status} />
               </button>
             ))}
           </section>
           <section className="perm-card">
-            <div className="page-head" style={{ marginBottom: 8 }}>
-              <div>
-                <h2 style={{ fontSize: 22, margin: 0 }}>{role.name}</h2>
-                <p className="hint">
-                  {granted} of {total} permissions granted
-                </p>
-              </div>
-              <div className="fields" style={{ gridTemplateColumns: "140px 140px", margin: 0 }}>
-                <label className="field">
-                  <span>Record scope</span>
-                  <select
-                    value={role.scope}
-                    onChange={(event) => replace(updateRole(state, role.id, { scope: event.target.value as RoleConfig["scope"] }, user))}
-                  >
-                    <option>Own</option>
-                    <option>Assigned</option>
-                    <option>Department</option>
-                    <option>All</option>
-                  </select>
-                </label>
-                <label className="field">
-                  <span>Status</span>
-                  <select
-                    value={role.status}
-                    onChange={(event) => replace(updateRole(state, role.id, { status: event.target.value as RoleConfig["status"] }, user))}
-                  >
-                    <option>Active</option>
-                    <option>Inactive</option>
-                  </select>
-                </label>
-              </div>
+            <p className="hint" style={{ marginTop: 0 }}>
+              {granted} of {total} permissions granted
+            </p>
+            {roleError && <div className="banner banner-danger">{roleError}</div>}
+            <div className="fields" style={{ marginBottom: 16 }}>
+              <Field label="Role name" required>
+                <input value={roleName} onChange={(event) => setRoleName(event.target.value)} onBlur={commitName} />
+              </Field>
+              <Field label="Status" required>
+                <select value={role.status} onChange={(event) => replace(updateRole(state, role.id, { status: event.target.value as RoleConfig["status"] }, user))}>
+                  <option>Active</option>
+                  <option>Inactive</option>
+                </select>
+              </Field>
+              <Field label="Description" className="span-2">
+                <textarea value={roleDescription} placeholder="Enter the description" onChange={(event) => setRoleDescription(event.target.value)} onBlur={commitDescription} />
+              </Field>
+              <Field label="Record scope" required hint="Own, assigned, department, or all permitted records.">
+                <select value={role.scope} onChange={(event) => replace(updateRole(state, role.id, { scope: event.target.value as RoleConfig["scope"] }, user))}>
+                  <option value="Own">Own</option>
+                  <option value="Assigned">Assigned</option>
+                  <option value="Department">Department</option>
+                  <option value="All">All permitted records</option>
+                </select>
+              </Field>
             </div>
             <div className="perm-scroll">
             <table className="perm">
@@ -143,7 +196,7 @@ export default function RolesPage() {
                   <th>Module</th>
                   <th>All</th>
                   {PERM_KEYS.map((key) => (
-                    <th key={key}>{key}</th>
+                    <th key={key}>{key[0].toUpperCase() + key.slice(1)}</th>
                   ))}
                 </tr>
               </thead>
@@ -189,7 +242,7 @@ export default function RolesPage() {
         >
           {error && <div className="banner banner-danger">{error}</div>}
           <div className="fields">
-            <Field label="Name" required>
+            <Field label="Role name" required>
               <input
                 autoFocus
                 placeholder="Enter the role name"
