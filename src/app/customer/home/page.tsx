@@ -2,127 +2,95 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
-import { PortalShell } from "@/components/portal-shell";
-import { ButtonLink, StatusText } from "@/components/ui";
+import { PortalShell, usePortalGuard } from "@/components/portal-shell";
+import { ButtonLink } from "@/components/ui";
+import { formatDate } from "@/lib/format";
 import { useStore } from "@/lib/store";
 
 export default function PortalHomePage() {
   const { state, replace } = useStore();
   const router = useRouter();
 
-  useEffect(() => {
-    if (state && !state.portalEmail) router.replace("/customer");
-  }, [state, router]);
+  usePortalGuard();
 
   if (!state || !state.portalEmail) return null;
   const email = state.portalEmail;
-  const invites = state.invitations.filter((item) => item.email.toLowerCase() === email && item.status !== "Revoked" && item.status !== "Expired");
-  const appIds = [...new Set(invites.map((item) => item.applicationId))];
-  const contact = state.customers.flatMap((customer) => customer.contacts).find((item) => item.email.toLowerCase() === email);
+  const customer = state.customers.find((item) => item.contacts.some((contact) => contact.email.toLowerCase() === email));
+  const contact = customer?.contacts.find((item) => item.email.toLowerCase() === email);
+  const requests = customer ? state.serviceRequests.filter((item) => item.customerId === customer.id) : [];
+
+  const rows = requests.map((request) => {
+    const instances = state.serviceInstances.filter((item) => item.requestId === request.id);
+    const items = instances.flatMap((instance) => instance.checklist);
+    const mandatory = items.filter((item) => item.requirement === "Mandatory");
+    const satisfied = mandatory.filter((item) => item.status === "Approved" || item.linkedFrom).length;
+    return {
+      request,
+      services: instances.length,
+      items,
+      percent: mandatory.length ? Math.round((satisfied / mandatory.length) * 100) : 100,
+      pending: mandatory.filter((item) => item.status === "Pending" && !item.linkedFrom).length,
+      rejected: items.filter((item) => item.status === "Rejected").length,
+    };
+  });
+  const all = rows.flatMap((row) => row.items);
+  const tiles = [
+    { label: "Service requests", value: requests.length },
+    { label: "Pending documents", value: all.filter((item) => item.status === "Pending" && !item.linkedFrom).length },
+    { label: "Under review", value: all.filter((item) => item.status === "Uploaded" || item.status === "Under Review").length },
+    { label: "Approved documents", value: all.filter((item) => item.status === "Approved" || item.linkedFrom).length },
+    { label: "Rejected documents", value: all.filter((item) => item.status === "Rejected").length },
+  ];
 
   return (
     <PortalShell email={email} onSignOut={() => replace({ ...state, portalEmail: null })}>
-      <p className="portal-kicker">Secure checklist</p>
+      <p className="portal-kicker">Document portal</p>
       <h1 className="portal-title">{contact ? `Hello, ${contact.name.split(" ")[0]}` : "Your documents"}</h1>
-      <p className="lede portal-lede">Upload what was requested. A file stays in review until the desk accepts that exact version.</p>
-      {appIds.filter(Boolean).length === 0 && invites.every((item) => !item.requestId) && <div className="banner">No open invitation is linked to {email}.</div>}
-      {appIds.map((appId) => {
-        const app = state.applications.find((item) => item.id === appId);
-        const customer = state.customers.find((item) => item.id === app?.customerId);
-        const items = state.checklist.filter((item) => item.applicationId === appId);
-        const accepted = items.filter((item) => item.status === "Approved").length;
-        const waiting = items.filter((item) => item.status === "Pending Upload" || item.status === "Rejected" || item.status === "Expired").length;
-        const width = items.length ? Math.round((accepted / items.length) * 100) : 0;
-        return (
-          <section key={appId} className="portal-file">
-            <header className="portal-file-head">
+      <p className="lede portal-lede">
+        {customer ? `${customer.name} · ${customer.code}. ` : ""}Upload what was requested. A file stays in review until the desk accepts that exact version.
+      </p>
+      {!customer && <div className="banner">No customer account is linked to {email}.</div>}
+      <section className="portal-file">
+        <div className="fields" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))" }}>
+          {tiles.map((tile) => (
+            <p key={tile.label} className="portal-count" style={{ textAlign: "left" }}>
+              <strong>{tile.value}</strong>
+              <span>{tile.label}</span>
+            </p>
+          ))}
+        </div>
+      </section>
+      <section className="portal-file">
+        <header className="portal-file-head">
+          <h2>My service requests</h2>
+          <ButtonLink href="/customer/home" variant="secondary">
+            Refresh
+          </ButtonLink>
+        </header>
+        {rows.length === 0 && <p className="hint">No service requests yet.</p>}
+        <ol className="portal-docs">
+          {rows.map((row) => (
+            <li className="portal-doc" key={row.request.id}>
+              <span className="portal-doc-index">{row.percent}%</span>
               <div>
-                <h2>{customer?.name ?? "Company"}</h2>
-                <p>
-                  {app?.number ?? "Application"} · {app?.loanType ?? "Lending"}
+                <strong>{row.request.number}</strong>
+                <p className="hint">
+                  {formatDate(row.request.requestDate)} · {row.services} {row.services === 1 ? "service" : "services"} · {row.percent}% documents
                 </p>
+                <p className="hint">
+                  {row.pending} pending · {row.rejected} to resubmit
+                </p>
+                <div className="portal-meter" role="progressbar" aria-valuenow={row.percent} aria-valuemin={0} aria-valuemax={100} aria-label="Document progress">
+                  <i style={{ width: `${row.percent}%` }} />
+                </div>
               </div>
-              <p className="portal-count">
-                <strong>{accepted}</strong>
-                <span>of {items.length} accepted</span>
-              </p>
-            </header>
-            <div className="portal-meter" role="progressbar" aria-valuenow={accepted} aria-valuemin={0} aria-valuemax={items.length} aria-label="Accepted documents">
-              <i style={{ width: `${width}%` }} />
-            </div>
-            <p className="hint portal-meter-note">{waiting === 0 ? "Nothing is waiting on you." : `${waiting} still need a file from you.`}</p>
-            <ol className="portal-docs">
-              {items.map((item, index) => (
-                <li className="portal-doc" key={item.id}>
-                  <span className="portal-doc-index">{String(index + 1).padStart(2, "0")}</span>
-                  <div>
-                    <strong>{item.name}</strong>
-                    <p className="hint">
-                      {item.category} · {item.requirement}
-                    </p>
-                    {item.instructions && <p className="portal-note">{item.instructions}</p>}
-                    <StatusText value={item.status} />
-                  </div>
-                  {item.customerUpload && item.status !== "Approved" ? (
-                    <ButtonLink href={`/customer/upload/${item.id}`}>{item.status === "Rejected" || item.status === "Expired" ? "Resubmit" : item.status === "Pending Upload" ? "Upload" : "View"}</ButtonLink>
-                  ) : (
-                    <span className="hint">{item.status === "Approved" ? "Accepted" : "With the desk"}</span>
-                  )}
-                </li>
-              ))}
-            </ol>
-            {customer && customer.shareholders.length > 0 && (
-              <div className="portal-holders">
-                <h3>Shareholder identity</h3>
-                {customer.shareholders.map((holder) => (
-                  <p key={holder.id}>
-                    {holder.name} · {holder.share}% · passport or Emirates ID goes with the identity documents above.
-                  </p>
-                ))}
-              </div>
-            )}
-          </section>
-        );
-      })}
-      {invites.filter((item) => item.requestId).map((invite) => {
-        const request = state.serviceRequests.find((item) => item.id === invite.requestId);
-        const customer = state.customers.find((item) => item.id === request?.customerId);
-        const items = state.serviceInstances.filter((item) => item.requestId === invite.requestId).flatMap((instance) => instance.checklist.map((row) => ({ ...row, serviceId: instance.serviceId })));
-        if (!request || items.length === 0) return null;
-        const accepted = items.filter((item) => item.status === "Approved").length;
-        return (
-          <section key={invite.id} className="portal-file">
-            <header className="portal-file-head">
-              <div>
-                <h2>{customer?.name ?? "Company"}</h2>
-                <p>{request.number} · service documents</p>
-              </div>
-              <p className="portal-count">
-                <strong>{accepted}</strong>
-                <span>of {items.length} accepted</span>
-              </p>
-            </header>
-            <ol className="portal-docs">
-              {items.map((item, index) => (
-                <li className="portal-doc" key={item.id}>
-                  <span className="portal-doc-index">{String(index + 1).padStart(2, "0")}</span>
-                  <div>
-                    <strong>{item.name}</strong>
-                    <p className="hint">{item.requirement}{item.linkedFrom ? " · linked from an existing document" : ""}</p>
-                    {item.rejectionReason && <p className="portal-note">Rejected: {item.rejectionReason}</p>}
-                    <StatusText value={item.status} />
-                  </div>
-                  {item.status === "Approved" || item.linkedFrom ? (
-                    <span className="hint">Accepted</span>
-                  ) : (
-                    <ButtonLink href={`/customer/upload/${item.id}`}>{item.status === "Rejected" ? "Resubmit" : "Upload"}</ButtonLink>
-                  )}
-                </li>
-              ))}
-            </ol>
-          </section>
-        );
-      })}
+              <ButtonLink href={`/customer/requests/${row.request.id}`}>
+                View documents
+              </ButtonLink>
+            </li>
+          ))}
+        </ol>
+      </section>
     </PortalShell>
   );
 }

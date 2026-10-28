@@ -503,6 +503,7 @@ export type Invitation = {
   id: string;
   applicationId: string;
   requestId?: string;
+  customerId?: string;
   contactId: string;
   email: string;
   mobile: string;
@@ -581,6 +582,29 @@ export type ChecklistRule = {
 
 export type ServiceDocStatus = "Pending" | "Uploaded" | "Under Review" | "Approved" | "Rejected" | "Expired";
 
+export type ServiceFile = {
+  id: string;
+  version: number;
+  fileName: string;
+  size: number;
+  dataUrl?: string;
+  uploadedBy: string;
+  uploadedByType: "Customer" | "Employee";
+  receivedThrough?: "Email" | "In Person" | "Other";
+  uploadedAt: string;
+  reference?: string;
+  issueDate?: string;
+  expiryDate?: string;
+  periodFrom?: string;
+  periodTo?: string;
+  remarks?: string;
+  status: "Uploaded" | "Approved" | "Rejected" | "Expired";
+  rejectionReason?: string;
+  reviewRemarks?: string;
+  verifiedBy?: string;
+  verifiedAt?: string;
+};
+
 export type ServiceChecklistItem = {
   id: string;
   documentCode: string;
@@ -590,6 +614,11 @@ export type ServiceChecklistItem = {
   rejectionReason?: string;
   linkedFrom?: string;
   fileName?: string;
+  minFiles?: number;
+  maxFiles?: number;
+  expiryDate?: string;
+  files?: ServiceFile[];
+  replacementAuthorized?: boolean;
 };
 
 export type ServiceDefinition = {
@@ -635,6 +664,7 @@ export type ServiceInstance = {
   reviewedBy?: string;
   reviewedAt?: string;
   checklist: ServiceChecklistItem[];
+  reviewFlag?: string;
   closureReason?: string;
 };
 

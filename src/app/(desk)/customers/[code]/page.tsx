@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
+import { PortalInvitationPanel } from "@/components/portal-invitation-panel";
 import { Button, ButtonLink, Field, PageHeader, StatusText, Tabs, DataTable } from "@/components/ui";
 import { can, userName } from "@/lib/access";
 import { updateCustomer, validateCustomerRecords } from "@/lib/actions";
@@ -11,7 +12,7 @@ import { aed, formatWhen, uid } from "@/lib/format";
 import { useDesk } from "@/lib/store";
 import type { Customer } from "@/lib/types";
 
-const TABS = ["Company Details", "Contacts", "Shareholders", "Compliance", "Banking Relationships", "Financial Information", "Existing Loans / Exposure", "Cheque Bounce Details", "Activity History"];
+const TABS = ["Company Details", "Contacts", "Shareholders", "Compliance", "Banking Relationships", "Financial Information", "Existing Loans / Exposure", "Cheque Bounce Details", "Portal Invitation", "Activity History"];
 
 export default function CustomerPage() {
   const params = useParams<{ code: string }>();
@@ -814,6 +815,9 @@ export default function CustomerPage() {
             </div>
           )}
         </div>
+      )}
+      {tab === "Portal Invitation" && (
+        <PortalInvitationPanel state={state} customerId={customer.id} user={user} onChange={replace} onError={setFormError} />
       )}
       {tab === "Activity History" && (
         <DataTable>

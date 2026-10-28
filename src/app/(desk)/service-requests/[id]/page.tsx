@@ -2,11 +2,15 @@
 
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { useState } from "react";
+import { Fragment, useState } from "react";
+import { DocumentFiles } from "@/components/document-files";
+import { DocumentUploadForm } from "@/components/document-upload-form";
+import { PortalInvitationPanel } from "@/components/portal-invitation-panel";
 import { ServicePanels } from "@/components/service-panels";
 import { Button, DataTable, Field, Gate, PageHeader, StatusText } from "@/components/ui";
 import { can, userName } from "@/lib/access";
-import { saveServiceActivity, sendServiceInvitation, setChecklistStatus, transitionService } from "@/lib/actions";
+import { decideServiceFile, saveServiceActivity, setChecklistStatus, submitServiceDocument, transitionService } from "@/lib/actions";
+import { liveFiles, requiredFiles } from "@/lib/service-documents";
 import { isTerminal, mandatoryApproved, parentRequestStatus } from "@/lib/request-status";
 import { useDesk } from "@/lib/store";
 import type { ServiceDocStatus } from "@/lib/types";
@@ -30,6 +34,8 @@ export default function ServiceRequestWorkspacePage() {
   const { state, replace, user } = useDesk();
   const [reasons, setReasons] = useState<Record<string, string>>({});
   const [error, setError] = useState("");
+  const [reviewing, setReviewing] = useState<string | null>(null);
+  const [uploading, setUploading] = useState<string | null>(null);
 
   if (!state || !user) return null;
   const request = state.serviceRequests.find((item) => item.id === id);
@@ -54,6 +60,17 @@ export default function ServiceRequestWorkspacePage() {
     }
     setError("");
     setReasons((current) => ({ ...current, [instanceId]: "" }));
+    replace(outcome.state);
+  }
+
+  function decide(instanceId: string, itemId: string, fileId: string, decision: "Approved" | "Rejected") {
+    const outcome = decideServiceFile(state!, instanceId, itemId, fileId, decision, user!, { reason: reasons[instanceId] ?? "" });
+    if (outcome.error) {
+      setError(outcome.error);
+      return;
+    }
+    setError("");
+    if (decision === "Rejected") setReasons((current) => ({ ...current, [instanceId]: "" }));
     replace(outcome.state);
   }
 
@@ -85,6 +102,7 @@ export default function ServiceRequestWorkspacePage() {
           </p>
         )}
         {error && <p className="err">{error}</p>}
+        {customer && <PortalInvitationPanel state={state} customerId={customer.id} requestId={request.id} user={user} onChange={replace} onError={setError} />}
         <div className="work" style={{ gridTemplateColumns: "minmax(0, 1fr)" }}>
           {instances.map((instance) => {
             const service = state.services.find((item) => item.id === instance.serviceId);
@@ -97,48 +115,116 @@ export default function ServiceRequestWorkspacePage() {
                   {instance.assessmentRequired ? " · assessment required" : " · assessment not applicable"} · <StatusText value={instance.status} />
                 </p>
                 <p className="hint">{workflowCue(instance.status, instance.assessmentRequired)}</p>
+                {instance.reviewFlag && <p className="err">Flagged for review: {instance.reviewFlag}</p>}
                 <DataTable>
                   <thead>
                     <tr>
                       <th>Document</th>
                       <th>Requirement</th>
+                      <th>Files</th>
+                      <th>Expiry date</th>
                       <th>Status</th>
+                      <th>Actions</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {instance.checklist.map((item) => (
-                      <tr key={item.id}>
-                        <td>
-                          {item.name}
-                          {item.linkedFrom && <div className="hint">Linked from an approved document</div>}
-                          {item.fileName && !item.linkedFrom && <div className="hint">{item.fileName}</div>}
-                          {item.rejectionReason && <div className="hint">Rejected: {item.rejectionReason}</div>}
-                        </td>
-                        <td>{item.requirement}</td>
-                        <td>
-                          <select
-                            aria-label={`${item.name} status`}
-                            value={item.status}
-                            disabled={locked || instance.status === "On Hold" || !can(state, "Applications", "edit")}
-                            onChange={(event) => markDoc(instance.id, item.id, event.target.value as ServiceDocStatus)}
-                          >
-                            {DOC_STATUSES.map((status) => (
-                              <option key={status}>{status}</option>
-                            ))}
-                          </select>
-                        </td>
-                      </tr>
-                    ))}
+                    {instance.checklist.map((item) => {
+                      const hasFiles = (item.files?.length ?? 0) > 0;
+                      const closed = locked || instance.status === "On Hold";
+                      const master = state.documents.find((doc) => doc.code === item.documentCode);
+                      const canReplace = item.status !== "Approved" && !(item.status === "Uploaded" && !master?.multiple);
+                      return (
+                        <Fragment key={item.id}>
+                          <tr>
+                            <td>
+                              {item.name}
+                              {item.linkedFrom && <div className="hint">Linked from an approved document</div>}
+                              {item.fileName && !item.linkedFrom && <div className="hint">{item.fileName}</div>}
+                              {item.rejectionReason && <div className="hint">Rejected: {item.rejectionReason}</div>}
+                            </td>
+                            <td>{item.requirement}</td>
+                            <td>{item.linkedFrom ? "Existing" : `${liveFiles(item).length} of ${requiredFiles(item)}`}</td>
+                            <td>{item.expiryDate ?? "None"}</td>
+                            <td>
+                              {hasFiles ? (
+                                <StatusText value={item.status === "Uploaded" ? "Under Review" : item.status} />
+                              ) : (
+                                <select
+                                  aria-label={`${item.name} status`}
+                                  value={item.status}
+                                  disabled={closed || !can(state, "Applications", "edit")}
+                                  onChange={(event) => markDoc(instance.id, item.id, event.target.value as ServiceDocStatus)}
+                                >
+                                  {DOC_STATUSES.map((status) => (
+                                    <option key={status}>{status}</option>
+                                  ))}
+                                </select>
+                              )}
+                            </td>
+                            <td>
+                              <div className="row-actions">
+                                {!closed && canReplace && can(state, "Applications", "edit") && (
+                                  <Button type="button" variant="secondary" onClick={() => setUploading(uploading === item.id ? null : item.id)}>
+                                    Upload on behalf
+                                  </Button>
+                                )}
+                                {hasFiles && (
+                                  <Button type="button" variant="secondary" onClick={() => setReviewing(reviewing === item.id ? null : item.id)}>
+                                    {reviewing === item.id ? "Hide" : "Review / History"}
+                                  </Button>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                          {uploading === item.id && (
+                            <tr>
+                              <td colSpan={6}>
+                                <DocumentUploadForm
+                                  item={item}
+                                  master={master}
+                                  internal
+                                  context={[
+                                    { label: "Request number", value: request.number },
+                                    { label: "Service", value: service?.name ?? "Service" },
+                                    { label: "Document", value: item.name },
+                                  ]}
+                                  onCancel={() => setUploading(null)}
+                                  onSubmit={(input, receivedThrough) => {
+                                    const outcome = submitServiceDocument(state, item.id, input, { type: "Employee", user, receivedThrough: receivedThrough ?? "Email" });
+                                    if (outcome.error) return outcome.error;
+                                    setError("");
+                                    setUploading(null);
+                                    replace(outcome.state);
+                                  }}
+                                />
+                              </td>
+                            </tr>
+                          )}
+                          {reviewing === item.id && (
+                            <tr>
+                              <td colSpan={6}>
+                                <DocumentFiles
+                                  item={item}
+                                  audience="staff"
+                                  nameOf={(userId) => userName(state, userId)}
+                                  onDecide={
+                                    closed || !can(state, "Verification", "approve")
+                                      ? undefined
+                                      : (file, decision) => decide(instance.id, item.id, file.id, decision)
+                                  }
+                                />
+                                <p className="hint">Rejecting needs a reason. Type it in the Reason or remarks box below, then press Reject.</p>
+                              </td>
+                            </tr>
+                          )}
+                        </Fragment>
+                      );
+                    })}
                   </tbody>
                 </DataTable>
                 <p className="hint">{mandatoryApproved(instance) ? "Mandatory documents are approved." : "Mandatory documents are still outstanding."}</p>
                 {!locked && can(state, "Applications", "edit") && !mandatoryApproved(instance) && (
                   <div className="row-actions">
-                    <Button type="button" onClick={() => {
-                      const outcome = sendServiceInvitation(state, request.id, user);
-                      if (outcome.error) setError(outcome.error);
-                      else { setError(""); replace(outcome.state); }
-                    }}>Send portal invitation</Button>
                     <Button type="button" variant="secondary" onClick={() => {
                       const outcome = saveServiceActivity(state, {
                         instanceId: instance.id,
