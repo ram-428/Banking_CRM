@@ -1,6 +1,9 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useEffect } from "react";
+import { useStore } from "@/lib/store";
 
 export function PortalShell({
   email,
@@ -42,4 +45,22 @@ export function PortalShell({
       <main className="portal-wrap">{children}</main>
     </div>
   );
+}
+
+/** Sends the customer back to sign-in when they have no session, or when every invitation for them was revoked or expired. */
+export function usePortalGuard() {
+  const { state, replace } = useStore();
+  const router = useRouter();
+  const email = state?.portalEmail ?? null;
+  const valid = Boolean(
+    state &&
+      email &&
+      state.invitations.some((item) => item.email.toLowerCase() === email && item.status !== "Revoked" && item.status !== "Expired" && new Date(item.expiresAt).getTime() > Date.now()),
+  );
+  useEffect(() => {
+    if (!state) return;
+    if (email && !valid) replace({ ...state, portalEmail: null });
+    if (!valid) router.replace("/customer");
+  }, [state, email, valid, replace, router]);
+  return valid;
 }

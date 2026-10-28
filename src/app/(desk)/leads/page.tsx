@@ -114,7 +114,7 @@ export default function LeadsPage() {
                     <div className="row-actions">
                       <RowAction icon="view" label="View" href={`/customers/${customer.code}`} />
                       {can(state, "Leads", "edit") && <RowAction icon="edit" label="Edit" onClick={() => setEditing(customer)} />}
-                      {can(state, "Applications", "create") && <RowAction icon="add" label="Create application" href={`/applications/new?customer=${customer.id}`} />}
+                      {can(state, "Applications", "create") && <RowAction icon="add" label="Create service request" href={`/service-requests?customer=${customer.id}`} />}
                     </div>
                   </td>
                 </tr>

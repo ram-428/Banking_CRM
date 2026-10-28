@@ -39,7 +39,23 @@ function NavIcon({ href }: { href: string }) {
       </svg>
     );
   }
-  if (href === "/tasks") {
+  if (href === "/service-requests") {
+    return (
+      <svg {...props}>
+        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+        <path d="M14 2v6h6M8 13h8M8 17h5" />
+      </svg>
+    );
+  }
+  if (href === "/service-master") {
+    return (
+      <svg {...props}>
+        <circle cx="12" cy="12" r="3" />
+        <path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2" />
+      </svg>
+    );
+  }
+  if (href === "/work-queue" || href === "/tasks") {
     return (
       <svg {...props}>
         <path d="M9 6h11M9 12h11M9 18h11" />
@@ -160,7 +176,7 @@ const CRUMB: Record<string, string> = {
   "service-requests": "Service request list",
   "service-master": "Service master",
   "work-queue": "My work queue",
-  customers: "Customer profiles",
+  customers: "Customer list",
   verification: "Verification queue",
   financials: "Financial profiles",
   statements: "Bank statement analysis",
@@ -195,8 +211,8 @@ function navCurrent(pathname: string, search: string, href: string) {
   const [path, query = ""] = href.split("?");
   if (path === "/documents") {
     if (pathname !== "/documents") return false;
-    const tab = new URLSearchParams(search).get("tab") ?? "categories";
-    const wanted = new URLSearchParams(query).get("tab") ?? "categories";
+    const tab = new URLSearchParams(search).get("tab") ?? "documents";
+    const wanted = new URLSearchParams(query).get("tab") ?? "documents";
     return tab === wanted;
   }
   if (pathname === path) return true;
@@ -252,14 +268,14 @@ export function Shell({ children }: { children: React.ReactNode }) {
       .filter((item) => `${item.name} ${item.code}`.toLowerCase().includes(q))
       .slice(0, 4)
       .map((item) => ({ href: `/customers/${item.code}`, label: item.name, meta: item.code }));
-    const apps = state.applications
+    const apps = state.serviceRequests
       .filter((item) => {
         const customer = state.customers.find((row) => row.id === item.customerId);
         return `${item.number} ${customer?.name ?? ""}`.toLowerCase().includes(q);
       })
       .slice(0, 4)
       .map((item) => ({
-        href: `/applications/${item.id}`,
+        href: `/service-requests/${item.id}`,
         label: item.number,
         meta: state.customers.find((row) => row.id === item.customerId)?.name ?? "",
       }));
@@ -366,8 +382,8 @@ export function Shell({ children }: { children: React.ReactNode }) {
               <path d="M20 20l-3.5-3.5" />
             </svg>
             <input
-              aria-label="Search companies and applications"
-              placeholder="Search company, code, or application"
+              aria-label="Search customers and service requests"
+              placeholder="Search customer, code, or request number"
               value={query}
               onChange={(event) => {
                 setQuery(event.target.value);

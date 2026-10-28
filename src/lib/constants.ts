@@ -163,10 +163,10 @@ export const NAV: { section: string; items: { href: string; label: string; modul
     items: [{ href: "/dashboard", label: "Dashboard", module: "Applications" }],
   },
   {
-    section: "Customer and Lead Management",
+    section: "Customers",
     items: [
       { href: "/leads", label: "Lead list", module: "Leads" },
-      { href: "/customers", label: "Customer profiles", module: "Leads" },
+      { href: "/customers", label: "Customer list", module: "Leads" },
     ],
   },
   {
@@ -174,53 +174,14 @@ export const NAV: { section: string; items: { href: string; label: string; modul
     items: [
       { href: "/service-requests", label: "Service request list", module: "Applications" },
       { href: "/work-queue", label: "My work queue", module: "Tasks" },
+    ],
+  },
+  {
+    section: "Configuration",
+    items: [
       { href: "/service-master", label: "Service master", module: "Documents" },
-    ],
-  },
-  {
-    section: "Lending Application Management",
-    items: [
-      { href: "/applications", label: "Application list", module: "Applications" },
-      { href: "/bank-submissions", label: "Bank submissions", module: "Banks" },
-      { href: "/bank-responses", label: "Bank responses", module: "Banks" },
-      { href: "/disbursements", label: "Disbursements", module: "Applications" },
-    ],
-  },
-  {
-    section: "Document Master and Checklist Configuration",
-    items: [
-      { href: "/documents", label: "Document categories", module: "Documents" },
       { href: "/documents?tab=documents", label: "Document master", module: "Documents" },
-      { href: "/documents?tab=rules", label: "Checklist configuration", module: "Documents" },
-      { href: "/verification", label: "Verification queue", module: "Verification" },
-      { href: "/ai-results", label: "AI results", module: "Verification" },
-      { href: "/versions", label: "Version history", module: "Verification" },
-    ],
-  },
-  {
-    section: "Financial Information",
-    items: [
-      { href: "/financials", label: "Financial profiles", module: "Financials" },
-      { href: "/statements", label: "Bank statement analysis", module: "Financials" },
-      { href: "/vat-returns", label: "VAT returns", module: "Financials" },
-      { href: "/audit-reports", label: "Audit reports", module: "Financials" },
-      { href: "/credit-reviews", label: "Credit review", module: "Credit" },
-    ],
-  },
-  {
-    section: "Workflow and Tasks",
-    items: [
-      { href: "/workflow", label: "Workflow dashboard", module: "Applications" },
-      { href: "/tasks", label: "My tasks", module: "Tasks" },
-      { href: "/task-assignment", label: "Task assignment", module: "Tasks" },
-      { href: "/follow-ups", label: "Customer follow-ups", module: "Leads" },
-    ],
-  },
-  {
-    section: "Agreements and Closure",
-    items: [
-      { href: "/agreements", label: "Agreement tracking", module: "Banks" },
-      { href: "/closures", label: "Application closure", module: "Applications" },
+      { href: "/documents?tab=rules", label: "Service document checklist", module: "Documents" },
     ],
   },
   {
@@ -232,8 +193,8 @@ export const NAV: { section: string; items: { href: string; label: string; modul
     ],
   },
   {
-    section: "",
-    items: [{ href: "/customer", label: "Customer", module: "Applications" }],
+    section: "Customer Portal",
+    items: [{ href: "/customer", label: "Document portal", module: "Applications" }],
   },
 ];
 

@@ -2,6 +2,7 @@
 
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
 import { currentUser } from "./access";
+import { expireServiceDocuments } from "./actions";
 import { createSeed } from "./seed";
 import type { State } from "./types";
 
@@ -48,10 +49,10 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     try {
       const raw = sessionStorage.getItem(KEY);
-      if (raw) setState(withServiceModel(JSON.parse(raw) as State));
-      else setState(createSeed());
+      if (raw) setState(expireServiceDocuments(withServiceModel(JSON.parse(raw) as State)));
+      else setState(expireServiceDocuments(createSeed()));
     } catch {
-      setState(createSeed());
+      setState(expireServiceDocuments(createSeed()));
     }
   }, []);
 
