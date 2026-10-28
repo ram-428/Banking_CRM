@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { Button, DataTable, Gate, PageHeader, StatusText } from "@/components/ui";
-import { userName } from "@/lib/access";
+import { can, userName } from "@/lib/access";
 import { progressServiceActivity } from "@/lib/actions";
 import { useDesk } from "@/lib/store";
 import type { ServiceActivity } from "@/lib/types";
@@ -55,7 +55,7 @@ export default function WorkQueuePage() {
   return (
     <Gate module="Tasks">
       <div className="page">
-        <PageHeader title="My work queue" lede="Activities assigned to you on service requests. Overdue is calculated from the due date." />
+        <PageHeader title="My work queue" lede="Activities assigned to you on service requests. Overdue is calculated from the due date." actions={can(state, "Verification") ? <Link className="link" href="/verification">Document verification queue</Link> : undefined} />
         {error && <p className="err">{error}</p>}
         <div className="filters">
           <select aria-label="Activity filter" value={filter} onChange={(event) => setFilter(event.target.value as (typeof FILTERS)[number])}>

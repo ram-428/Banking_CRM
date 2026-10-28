@@ -58,7 +58,6 @@ export default function CustomerPage() {
         actions={
           <>
             <ButtonLink href={`/service-requests?customer=${customer.id}`}>Create service request</ButtonLink>
-            <ButtonLink href={`/applications/new?customer=${customer.id}`}>Create application</ButtonLink>
           </>
         }
       />
