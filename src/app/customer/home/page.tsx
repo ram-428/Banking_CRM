@@ -25,7 +25,7 @@ export default function PortalHomePage() {
       <p className="portal-kicker">Secure checklist</p>
       <h1 className="portal-title">{contact ? `Hello, ${contact.name.split(" ")[0]}` : "Your documents"}</h1>
       <p className="lede portal-lede">Upload what was requested. A file stays in review until the desk accepts that exact version.</p>
-      {appIds.length === 0 && <div className="banner">No open invitation is linked to {email}.</div>}
+      {appIds.filter(Boolean).length === 0 && invites.every((item) => !item.requestId) && <div className="banner">No open invitation is linked to {email}.</div>}
       {appIds.map((appId) => {
         const app = state.applications.find((item) => item.id === appId);
         const customer = state.customers.find((item) => item.id === app?.customerId);
@@ -81,6 +81,45 @@ export default function PortalHomePage() {
                 ))}
               </div>
             )}
+          </section>
+        );
+      })}
+      {invites.filter((item) => item.requestId).map((invite) => {
+        const request = state.serviceRequests.find((item) => item.id === invite.requestId);
+        const customer = state.customers.find((item) => item.id === request?.customerId);
+        const items = state.serviceInstances.filter((item) => item.requestId === invite.requestId).flatMap((instance) => instance.checklist.map((row) => ({ ...row, serviceId: instance.serviceId })));
+        if (!request || items.length === 0) return null;
+        const accepted = items.filter((item) => item.status === "Approved").length;
+        return (
+          <section key={invite.id} className="portal-file">
+            <header className="portal-file-head">
+              <div>
+                <h2>{customer?.name ?? "Company"}</h2>
+                <p>{request.number} · service documents</p>
+              </div>
+              <p className="portal-count">
+                <strong>{accepted}</strong>
+                <span>of {items.length} accepted</span>
+              </p>
+            </header>
+            <ol className="portal-docs">
+              {items.map((item, index) => (
+                <li className="portal-doc" key={item.id}>
+                  <span className="portal-doc-index">{String(index + 1).padStart(2, "0")}</span>
+                  <div>
+                    <strong>{item.name}</strong>
+                    <p className="hint">{item.requirement}{item.linkedFrom ? " · linked from an existing document" : ""}</p>
+                    {item.rejectionReason && <p className="portal-note">Rejected: {item.rejectionReason}</p>}
+                    <StatusText value={item.status} />
+                  </div>
+                  {item.status === "Approved" || item.linkedFrom ? (
+                    <span className="hint">Accepted</span>
+                  ) : (
+                    <ButtonLink href={`/customer/upload/${item.id}`}>{item.status === "Rejected" ? "Resubmit" : "Upload"}</ButtonLink>
+                  )}
+                </li>
+              ))}
+            </ol>
           </section>
         );
       })}

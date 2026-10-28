@@ -6,6 +6,7 @@ import { can, isAdministrator, userName } from "@/lib/access";
 import { APP_STATUSES, STAGES } from "@/lib/constants";
 import { aed, formatDate, formatWhen, greeting, todayKey } from "@/lib/format";
 import { deliveredTotal, isOverdue } from "@/lib/metrics";
+import { parentRequestStatus } from "@/lib/request-status";
 import { useDesk } from "@/lib/store";
 import type { ModuleKey } from "@/lib/types";
 
@@ -75,6 +76,27 @@ export default function DashboardPage() {
   }, [state, user, status, from, to]);
 
   if (!state || !user || !figures) return null;
+  const today = todayKey();
+  const serviceRequests = state.serviceRequests.filter((request) => {
+    if (user.role === "Admin" || user.role === "Management") return true;
+    const owned = state.serviceInstances.filter((item) => item.requestId === request.id);
+    return request.assigneeId === user.id || owned.some((item) => item.assigneeId === user.id);
+  });
+  const serviceInstances = state.serviceInstances.filter((item) => serviceRequests.some((request) => request.id === item.requestId));
+  const serviceFigures = {
+    requests: serviceRequests,
+    inProgress: serviceRequests.filter((request) => {
+      const status = parentRequestStatus(serviceInstances.filter((item) => item.requestId === request.id));
+      return status === "Draft" || status === "In Progress" || status === "On Hold";
+    }).length,
+    held: serviceInstances.filter((item) => item.status === "On Hold").length,
+    assessments: serviceInstances.filter((item) => item.assessmentRequired && item.assessmentStatus !== "Finalized" && item.status !== "Rejected" && item.status !== "Cancelled").length,
+    overdue: state.serviceActivities.filter((item) => {
+      const visible = user.role === "Admin" || user.role === "Management" || item.assigneeId === user.id;
+      return visible && Boolean(item.due && item.due < today && item.status !== "Completed" && item.status !== "Cancelled");
+    }).length,
+    documents: serviceInstances.reduce((sum, item) => sum + item.checklist.filter((row) => row.requirement === "Mandatory" && row.status !== "Approved").length, 0),
+  };
   const actions = ACTIONS.filter((item) => {
     if (item.href === "/roles" && !isAdministrator(state)) return false;
     return can(state, item.module, item.action ?? "view");
@@ -119,6 +141,15 @@ export default function DashboardPage() {
         <Card href="/tasks" label="Overdue tasks" value={String(figures.overdueTasks.length)} hint="Due before today" tone="info" />
         <Card href="/applications" label="Approved applications" value={String(figures.approved.length)} hint="Approved or already disbursed" tone="olive" />
         <Card href="/applications" label="Total disbursed" value={aed(figures.disbursed)} hint="Sum of delivery records" money />
+      </div>
+      <h2 className="block-title">Service requests</h2>
+      <div className="kpi-row">
+        <Card href="/service-requests" label="Service requests" value={String(serviceFigures.requests.length)} hint="Parent requests in this desk" />
+        <Card href="/service-requests" label="In progress" value={String(serviceFigures.inProgress)} hint="Parent status is still open" />
+        <Card href="/service-requests" label="Services on hold" value={String(serviceFigures.held)} hint="One service on hold does not stop the others" tone="info" />
+        <Card href="/service-requests" label="Assessments open" value={String(serviceFigures.assessments)} hint="Required assessments not yet finalized" />
+        <Card href="/work-queue" label="Overdue activities" value={String(serviceFigures.overdue)} hint="Due date has passed and the activity is still open" tone="info" />
+        <Card href="/service-requests" label="Documents outstanding" value={String(serviceFigures.documents)} hint="Mandatory items not approved" />
       </div>
       <div className="split-cards">
         <section className="panel">

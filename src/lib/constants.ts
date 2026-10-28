@@ -170,6 +170,14 @@ export const NAV: { section: string; items: { href: string; label: string; modul
     ],
   },
   {
+    section: "Service Requests",
+    items: [
+      { href: "/service-requests", label: "Service request list", module: "Applications" },
+      { href: "/work-queue", label: "My work queue", module: "Tasks" },
+      { href: "/service-master", label: "Service master", module: "Documents" },
+    ],
+  },
+  {
     section: "Lending Application Management",
     items: [
       { href: "/applications", label: "Application list", module: "Applications" },

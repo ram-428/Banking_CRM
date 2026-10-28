@@ -5,7 +5,7 @@ import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Button, ButtonLink, Field, PageHeader, StatusText, Tabs, DataTable } from "@/components/ui";
 import { can, userName } from "@/lib/access";
-import { updateCustomer } from "@/lib/actions";
+import { updateCustomer, validateCustomerRecords } from "@/lib/actions";
 import { BANKS, EMIRATES, LEAD_STATUSES, LEGAL_TYPES, LOBS } from "@/lib/constants";
 import { aed, formatWhen, uid } from "@/lib/format";
 import { useDesk } from "@/lib/store";
@@ -20,6 +20,7 @@ export default function CustomerPage() {
   const [tab, setTab] = useState("Company Details");
   const [draft, setDraft] = useState<Customer | null>(null);
   const [saved, setSaved] = useState(false);
+  const [formError, setFormError] = useState("");
 
   useEffect(() => {
     if (customer) setDraft(structuredClone(customer));
@@ -37,6 +38,13 @@ export default function CustomerPage() {
 
   function save(detail: string) {
     if (!draft) return;
+    const problem = validateCustomerRecords(draft);
+    if (problem) {
+      setFormError(problem);
+      setSaved(false);
+      return;
+    }
+    setFormError("");
     replace(updateCustomer(state!, draft.id, draft, user!, detail));
     setSaved(true);
   }
@@ -47,7 +55,12 @@ export default function CustomerPage() {
         crumbs={[{ href: "/customers", label: "Customer profiles" }, { label: customer.code }]}
         title={draft.name}
         lede={`${customer.code} · ${draft.folderRef} · last change ${formatWhen(customer.updatedAt)} by ${userName(state, customer.updatedBy)}`}
-        actions={<ButtonLink href={`/applications/new?customer=${customer.id}`}>Create application</ButtonLink>}
+        actions={
+          <>
+            <ButtonLink href={`/service-requests?customer=${customer.id}`}>Create service request</ButtonLink>
+            <ButtonLink href={`/applications/new?customer=${customer.id}`}>Create application</ButtonLink>
+          </>
+        }
       />
       <div className="fields" style={{ marginBottom: 18, alignItems: "end" }}>
         <Field label="Lead status">
@@ -66,6 +79,7 @@ export default function CustomerPage() {
           <Button onClick={() => save("Company profile saved.")} disabled={!canEdit}>
             Save profile
           </Button>
+          {formError && <p className="err">{formError}</p>}
           {saved && <span className="hint"> Saved.</span>}
         </div>
       </div>
@@ -442,6 +456,131 @@ export default function CustomerPage() {
           <Field label="Average balance, 12 months">
             <input value={draft.avgBalance12 ?? ""} onChange={(event) => patch({ avgBalance12: Number(event.target.value) })} />
           </Field>
+          <div className="span-2">
+            <h2 className="block-title">Turnover periods</h2>
+            <DataTable>
+              <thead>
+                <tr>
+                  <th>From</th>
+                  <th>To</th>
+                  <th>Sales</th>
+                  <th>POS</th>
+                  <th>Bank</th>
+                  <th>Source</th>
+                  <th>Remarks</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(draft.turnovers ?? []).map((row, index) => (
+                  <tr key={row.id}>
+                    {(["from", "to"] as const).map((key) => (
+                      <td key={key}>
+                        <input type="date" value={row[key]} onChange={(event) => {
+                          const turnovers = [...(draft.turnovers ?? [])];
+                          turnovers[index] = { ...row, [key]: event.target.value };
+                          patch({ turnovers });
+                        }} />
+                      </td>
+                    ))}
+                    {(["sales", "pos", "bank"] as const).map((key) => (
+                      <td key={key}>
+                        <input value={row[key]} onChange={(event) => {
+                          const turnovers = [...(draft.turnovers ?? [])];
+                          turnovers[index] = { ...row, [key]: Number(event.target.value) };
+                          patch({ turnovers });
+                        }} />
+                      </td>
+                    ))}
+                    <td>
+                      <select value={row.source} onChange={(event) => {
+                        const turnovers = [...(draft.turnovers ?? [])];
+                        turnovers[index] = { ...row, source: event.target.value as NonNullable<Customer["turnovers"]>[number]["source"] };
+                        patch({ turnovers });
+                      }}>
+                        <option>Manual</option>
+                        <option>AI Extracted</option>
+                        <option>Reviewed Document</option>
+                      </select>
+                    </td>
+                    <td>
+                      <input value={row.remarks ?? ""} onChange={(event) => {
+                        const turnovers = [...(draft.turnovers ?? [])];
+                        turnovers[index] = { ...row, remarks: event.target.value };
+                        patch({ turnovers });
+                      }} />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </DataTable>
+            <Button type="button" variant="secondary" onClick={() => patch({ turnovers: [...(draft.turnovers ?? []), { id: uid("trn"), from: "", to: "", sales: 0, pos: 0, bank: 0, source: "Manual" }] })}>
+              Add turnover period
+            </Button>
+            <h2 className="block-title">Average bank balances</h2>
+            <DataTable>
+              <thead>
+                <tr>
+                  <th>Bank</th>
+                  <th>Other bank name</th>
+                  <th>From</th>
+                  <th>To</th>
+                  <th>Average balance</th>
+                  <th>Source</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(draft.averageBalances ?? []).map((row, index) => (
+                  <tr key={row.id}>
+                    <td>
+                      <select value={row.bank} onChange={(event) => {
+                        const averageBalances = [...(draft.averageBalances ?? [])];
+                        averageBalances[index] = { ...row, bank: event.target.value };
+                        patch({ averageBalances });
+                      }}>
+                        {BANKS.map((bank) => <option key={bank}>{bank}</option>)}
+                      </select>
+                    </td>
+                    <td>
+                      <input value={row.otherBank ?? ""} disabled={row.bank !== "Other"} onChange={(event) => {
+                        const averageBalances = [...(draft.averageBalances ?? [])];
+                        averageBalances[index] = { ...row, otherBank: event.target.value };
+                        patch({ averageBalances });
+                      }} />
+                    </td>
+                    <td><input type="date" value={row.from} onChange={(event) => {
+                      const averageBalances = [...(draft.averageBalances ?? [])];
+                      averageBalances[index] = { ...row, from: event.target.value };
+                      patch({ averageBalances });
+                    }} /></td>
+                    <td><input type="date" value={row.to} onChange={(event) => {
+                      const averageBalances = [...(draft.averageBalances ?? [])];
+                      averageBalances[index] = { ...row, to: event.target.value };
+                      patch({ averageBalances });
+                    }} /></td>
+                    <td><input value={row.average} onChange={(event) => {
+                      const averageBalances = [...(draft.averageBalances ?? [])];
+                      averageBalances[index] = { ...row, average: Number(event.target.value) };
+                      patch({ averageBalances });
+                    }} /></td>
+                    <td>
+                      <select value={row.source} onChange={(event) => {
+                        const averageBalances = [...(draft.averageBalances ?? [])];
+                        averageBalances[index] = { ...row, source: event.target.value as NonNullable<Customer["averageBalances"]>[number]["source"] };
+                        patch({ averageBalances });
+                      }}>
+                        <option>Manual</option>
+                        <option>AI Extracted</option>
+                        <option>Reviewed Document</option>
+                      </select>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </DataTable>
+            <Button type="button" variant="secondary" onClick={() => patch({ averageBalances: [...(draft.averageBalances ?? []), { id: uid("bal"), bank: "Emirates NBD", from: "", to: "", average: 0, source: "Manual" }] })}>
+              Add average balance
+            </Button>
+          </div>
           <Field label="Audit report available">
             <select value={draft.auditAvailable} onChange={(event) => patch({ auditAvailable: event.target.value as "Yes" | "No" })}>
               <option>Yes</option>
@@ -607,9 +746,10 @@ export default function CustomerPage() {
               <DataTable>
                 <thead>
                   <tr>
-                    <th>Date</th>
-                    <th>Amount</th>
-                    <th>Status</th>
+                    <th>Bank</th>
+                    <th>Cheque date</th>
+                    <th>Cheque amount</th>
+                    <th>Bounce count</th>
                     <th>Remarks</th>
                   </tr>
                 </thead>
@@ -617,45 +757,49 @@ export default function CustomerPage() {
                   {draft.bounces.map((bounce, index) => (
                     <tr key={bounce.id}>
                       <td>
-                        <input
-                          type="date"
-                          value={bounce.date}
-                          onChange={(event) => {
+                        <select value={bounce.bank ?? ""} onChange={(event) => {
+                          const bounces = [...draft.bounces];
+                          bounces[index] = { ...bounce, bank: event.target.value };
+                          patch({ bounces });
+                        }}>
+                          <option value="">Select a bank</option>
+                          {BANKS.map((bank) => <option key={bank}>{bank}</option>)}
+                        </select>
+                        {bounce.bank === "Other" && (
+                          <input placeholder="Other bank name" value={bounce.otherBank ?? ""} onChange={(event) => {
                             const bounces = [...draft.bounces];
-                            bounces[index] = { ...bounce, date: event.target.value };
+                            bounces[index] = { ...bounce, otherBank: event.target.value };
                             patch({ bounces });
-                          }}
-                        />
+                          }} />
+                        )}
                       </td>
                       <td>
-                        <input
-                          value={bounce.amount}
-                          onChange={(event) => {
-                            const bounces = [...draft.bounces];
-                            bounces[index] = { ...bounce, amount: Number(event.target.value) };
-                            patch({ bounces });
-                          }}
-                        />
+                        <input type="date" value={bounce.date} onChange={(event) => {
+                          const bounces = [...draft.bounces];
+                          bounces[index] = { ...bounce, date: event.target.value };
+                          patch({ bounces });
+                        }} />
                       </td>
                       <td>
-                        <input
-                          value={bounce.status}
-                          onChange={(event) => {
-                            const bounces = [...draft.bounces];
-                            bounces[index] = { ...bounce, status: event.target.value };
-                            patch({ bounces });
-                          }}
-                        />
+                        <input value={bounce.amount} onChange={(event) => {
+                          const bounces = [...draft.bounces];
+                          bounces[index] = { ...bounce, amount: Number(event.target.value) };
+                          patch({ bounces });
+                        }} />
                       </td>
                       <td>
-                        <input
-                          value={bounce.remarks}
-                          onChange={(event) => {
-                            const bounces = [...draft.bounces];
-                            bounces[index] = { ...bounce, remarks: event.target.value };
-                            patch({ bounces });
-                          }}
-                        />
+                        <input value={bounce.bounceCount ?? 0} onChange={(event) => {
+                          const bounces = [...draft.bounces];
+                          bounces[index] = { ...bounce, bounceCount: Number(event.target.value) };
+                          patch({ bounces });
+                        }} />
+                      </td>
+                      <td>
+                        <input value={bounce.remarks} onChange={(event) => {
+                          const bounces = [...draft.bounces];
+                          bounces[index] = { ...bounce, remarks: event.target.value };
+                          patch({ bounces });
+                        }} />
                       </td>
                     </tr>
                   ))}
@@ -664,7 +808,7 @@ export default function CustomerPage() {
               <Button
                 type="button"
                 variant="secondary"
-                onClick={() => patch({ bounces: [...draft.bounces, { id: uid("bq"), date: "", amount: 0, status: "Open", remarks: "" }] })}
+                onClick={() => patch({ bounces: [...draft.bounces, { id: uid("bq"), bank: "Emirates NBD", date: "", amount: 0, bounceCount: 0, status: "", remarks: "" }] })}
               >
                 Add cheque bounce
               </Button>
