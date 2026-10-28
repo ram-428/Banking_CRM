@@ -389,8 +389,8 @@ export function Shell({ children }: { children: React.ReactNode }) {
           </div>
           <div className="top-actions">
             <div style={{ position: "relative" }}>
-              <button className="icon-btn" type="button" aria-label="Notifications" onClick={() => setMenu(menu === "bell" ? null : "bell")}>
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true">
+              <button className="icon-btn bell-btn" type="button" aria-label="Notifications" onClick={() => setMenu(menu === "bell" ? null : "bell")}>
+                <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
                   <path d="M6 9a6 6 0 0 1 12 0c0 7 2 7 2 9H4c0-2 2-2 2-9" />
                   <path d="M10 20a2 2 0 0 0 4 0" />
                 </svg>
