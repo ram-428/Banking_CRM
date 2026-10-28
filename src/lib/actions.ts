@@ -1,6 +1,7 @@
 import { MODULES, noFlags } from "./constants";
 import { uid } from "./format";
 import { applyBankRollup, captureSnapshot } from "./metrics";
+import { isTerminal, mandatoryApproved } from "./request-status";
 import type {
   RoleConfig,
   Agreement,
@@ -12,9 +13,16 @@ import type {
   Customer,
   Delivery,
   DocVersion,
+  ExtractionRecord,
   FollowUp,
+  LoanDeliveryRecord,
+  ServiceActivity,
+  ServiceDefinition,
+  ServiceInstance,
+  ServiceRequestRecord,
   State,
   Task,
+  TurnoverSource,
   User,
 } from "./types";
 
@@ -43,10 +51,12 @@ function withAudit(
   };
 }
 
-function notice(state: State, title: string, detail: string, href: string): State {
+function notice(state: State, title: string, detail: string, href: string, userId?: string): State {
+  const duplicate = state.notices.some((item) => !item.read && item.title === title && item.href === href && item.userId === userId);
+  if (duplicate) return state;
   return {
     ...state,
-    notices: [{ id: uid("nt"), title, detail, href, read: false, at: new Date().toISOString() }, ...state.notices],
+    notices: [{ id: uid("nt"), title, detail, href, read: false, at: new Date().toISOString(), userId }, ...state.notices],
   };
 }
 
@@ -192,10 +202,36 @@ export function createLead(state: State, input: LeadInput, actor: User): { state
   return { state: next, code };
 }
 
+const SOURCES: TurnoverSource[] = ["Manual", "AI Extracted", "Reviewed Document"];
+
+export function validateCustomerRecords(customer: Customer): string | undefined {
+  for (const row of customer.turnovers ?? []) {
+    if (!row.from || !row.to) return "Reporting period from and to are required for turnover.";
+    if (row.to < row.from) return "The turnover period end must be on or after the start.";
+    if ([row.sales, row.pos, row.bank].some((amount) => Number.isNaN(amount) || amount < 0)) return "Turnover amounts must be zero or greater.";
+    if (!SOURCES.includes(row.source)) return "Turnover source must be Manual, AI Extracted, or Reviewed Document.";
+  }
+  for (const row of customer.averageBalances ?? []) {
+    if (!row.bank || !row.from || !row.to) return "Bank name and both period dates are required for an average balance.";
+    if (row.bank === "Other" && !row.otherBank?.trim()) return "Other bank name is required.";
+    if (row.to < row.from) return "The average balance period end must be on or after the start.";
+    if (Number.isNaN(row.average) || row.average < 0) return "Average balance must be zero or greater.";
+  }
+  for (const row of customer.bounces) {
+    if (!row.date && !row.amount && !row.bank) continue;
+    if (!row.bank) return "Bank name is required for a cheque return.";
+    if (row.bank === "Other" && !row.otherBank?.trim()) return "Other bank name is required for a cheque return.";
+    if (!(row.amount > 0)) return "Cheque amount must be greater than zero.";
+    if (row.bounceCount == null || !Number.isInteger(row.bounceCount) || row.bounceCount < 0) return "Bounce count must be a whole number of zero or more.";
+  }
+  return undefined;
+}
+
 export function updateCustomer(state: State, id: string, patch: Partial<Customer>, actor: User, detail: string): State {
   const current = state.customers.find((item) => item.id === id);
   if (!current) return state;
   const nextCustomer = { ...current, ...patch, id: current.id, code: current.code, updatedAt: new Date().toISOString(), updatedBy: actor.id };
+  if (validateCustomerRecords(nextCustomer)) return state;
   return withAudit(
     { ...state, customers: state.customers.map((item) => (item.id === id ? nextCustomer : item)) },
     actor.id,
@@ -884,6 +920,488 @@ export function correctAi(state: State, versionId: string, companyName: string, 
     versionId,
     { detail: `Corrected extracted name to ${companyName}. Approval is unchanged.` },
   );
+}
+
+function touchRequest(state: State, requestId: string): State {
+  const now = new Date().toISOString();
+  return {
+    ...state,
+    serviceRequests: state.serviceRequests.map((item) => (item.id === requestId ? { ...item, updatedAt: now } : item)),
+  };
+}
+
+export function saveServiceDefinition(state: State, input: Omit<ServiceDefinition, "id"> & { id?: string }, actor: User): { state: State; error?: string } {
+  const name = input.name.trim();
+  if (!name) return { state, error: "Service name is required." };
+  const clash = state.services.find((item) => item.name.toLowerCase() === name.toLowerCase() && item.id !== input.id);
+  if (clash) return { state, error: "A service with that name already exists." };
+  if (input.documentCodes.length === 0) return { state, error: "Select at least one document for the checklist." };
+  if (input.id) {
+    const next = withAudit(
+      { ...state, services: state.services.map((item) => (item.id === input.id ? { ...item, ...input, name } : item)) },
+      actor.id,
+      "Update",
+      "Service Master",
+      name,
+    );
+    return { state: next };
+  }
+  const service: ServiceDefinition = { ...input, id: uid("svc"), name };
+  return { state: withAudit({ ...state, services: [service, ...state.services] }, actor.id, "Create", "Service Master", name) };
+}
+
+function reusableDocument(state: State, customerId: string, code: string) {
+  const requestIds = new Set(state.serviceRequests.filter((item) => item.customerId === customerId).map((item) => item.id));
+  const linked = state.serviceInstances.find((instance) => requestIds.has(instance.requestId) && instance.checklist.some((item) => item.documentCode === code && item.status === "Approved" && item.fileName));
+  if (linked) return linked.checklist.find((item) => item.documentCode === code)?.id;
+  const applicationIds = new Set(state.applications.filter((item) => item.customerId === customerId).map((item) => item.id));
+  const approved = state.checklist.find((item) => applicationIds.has(item.applicationId) && item.documentCode === code && item.status === "Approved");
+  return approved?.id;
+}
+
+export function createServiceRequest(
+  state: State,
+  input: { customerId: string; serviceIds: string[]; assigneeId: string; priority: ServiceRequestRecord["priority"]; remarks?: string; previousRequestId?: string },
+  actor: User,
+): { state: State; error?: string; id?: string } {
+  const customer = state.customers.find((item) => item.id === input.customerId);
+  if (!customer || customer.leadStatus === "Lost") return { state, error: "Select an active customer." };
+  const unique = [...new Set(input.serviceIds)];
+  if (unique.length === 0) return { state, error: "Select at least one active banking service." };
+  if (unique.length !== input.serviceIds.length) return { state, error: "The same banking service cannot be selected twice in one request." };
+  const chosen = unique.map((id) => state.services.find((item) => item.id === id));
+  if (chosen.some((item) => !item || item.status !== "Active")) return { state, error: "Every selected service must be active." };
+  const assignee = state.users.find((item) => item.id === input.assigneeId && item.status === "Active");
+  if (!assignee) return { state, error: "Assigned employee must be an active user." };
+  const n = (state.counters.request ?? 0) + 1;
+  const now = new Date().toISOString();
+  const request: ServiceRequestRecord = {
+    id: `req-${n}`,
+    number: `REQ-${String(n).padStart(4, "0")}`,
+    customerId: customer.id,
+    requestDate: now.slice(0, 10),
+    assigneeId: assignee.id,
+    priority: input.priority,
+    remarks: input.remarks?.trim() || undefined,
+    createdAt: now,
+    updatedAt: now,
+    previousRequestId: input.previousRequestId,
+  };
+  let instanceCounter = state.counters.serviceInstance ?? 0;
+  const instances: ServiceInstance[] = chosen.flatMap((service) => {
+    if (!service) return [];
+    instanceCounter += 1;
+    return [
+      {
+        id: `si-${instanceCounter}`,
+        requestId: request.id,
+        serviceId: service.id,
+        assigneeId: assignee.id,
+        status: "Draft",
+        assessmentRequired: service.financialAssessment,
+        assessmentStatus: service.financialAssessment ? "Pending" : "Not required",
+        checklist: service.documentCodes.map((code) => {
+          const master = state.documents.find((item) => item.code === code);
+          const reusable = reusableDocument(state, customer.id, code);
+          return {
+            id: `${request.id}-${service.id}-${code}`,
+            documentCode: code,
+            name: master?.name ?? code,
+            requirement: "Mandatory" as const,
+            status: reusable ? ("Approved" as const) : ("Pending" as const),
+            linkedFrom: reusable,
+            fileName: reusable ? "Linked from an approved document" : undefined,
+          };
+        }).filter((item, _index, all) => all.findIndex((row) => row.documentCode === item.documentCode) === _index),
+      },
+    ];
+  });
+  const next = withAudit(
+    {
+      ...state,
+      counters: { ...state.counters, request: n, serviceInstance: instanceCounter },
+      serviceRequests: [request, ...state.serviceRequests],
+      serviceInstances: [...instances, ...state.serviceInstances],
+    },
+    actor.id,
+    "Create",
+    "Service Request",
+    request.number,
+    { detail: `${instances.length} service instance${instances.length === 1 ? "" : "s"} created.` },
+  );
+  return { state: next, id: request.id };
+}
+
+function replaceInstance(state: State, nextInstance: ServiceInstance, actor: User, action: string, detail: string, previous?: string): State {
+  const request = state.serviceRequests.find((item) => item.id === nextInstance.requestId);
+  const updated = touchRequest(
+    {
+      ...state,
+      serviceInstances: state.serviceInstances.map((item) => (item.id === nextInstance.id ? nextInstance : item)),
+    },
+    nextInstance.requestId,
+  );
+  return withAudit(updated, actor.id, action, "Service Request", request?.number ?? nextInstance.id, {
+    previous,
+    next: nextInstance.status,
+    detail,
+  });
+}
+
+export function setChecklistStatus(state: State, instanceId: string, itemId: string, status: ServiceInstance["checklist"][number]["status"], actor: User, rejectionReason?: string): { state: State; error?: string } {
+  const instance = state.serviceInstances.find((item) => item.id === instanceId);
+  if (!instance) return { state, error: "Service instance not found." };
+  if (isTerminal(instance.status) || instance.status === "On Hold") return { state, error: "This service is not open for document changes." };
+  const item = instance.checklist.find((row) => row.id === itemId);
+  if (!item) return { state, error: "Checklist item not found." };
+  if (status === "Rejected" && !rejectionReason?.trim()) return { state, error: "A rejection reason is required." };
+  const nextInstance: ServiceInstance = {
+    ...instance,
+    checklist: instance.checklist.map((row) =>
+      row.id === itemId ? { ...row, status, rejectionReason: status === "Rejected" ? rejectionReason?.trim() : undefined, linkedFrom: status === "Approved" ? row.linkedFrom : undefined } : row,
+    ),
+  };
+  let next = replaceInstance(state, nextInstance, actor, "Verify document", `${item.name} marked ${status}.`, item.status);
+  const request = state.serviceRequests.find((row) => row.id === instance.requestId);
+  const href = `/service-requests/${instance.requestId}`;
+  if (status === "Rejected") next = notice(next, "Document rejected", `${item.name} was rejected on ${request?.number ?? instance.id}. ${rejectionReason ?? ""}`.trim(), href, instance.assigneeId);
+  if (status === "Expired") next = notice(next, "Document expiring", `${item.name} is expired on ${request?.number ?? instance.id}.`, href, instance.assigneeId);
+  return { state: next };
+}
+
+export function sendServiceInvitation(state: State, requestId: string, actor: User): { state: State; error?: string } {
+  const request = state.serviceRequests.find((item) => item.id === requestId);
+  const customer = state.customers.find((item) => item.id === request?.customerId);
+  const contact = customer?.contacts.find((item) => item.email);
+  if (!request || !customer || !contact?.email) return { state, error: "The customer needs a contact email before an invitation can be sent." };
+  const outstanding = state.serviceInstances
+    .filter((item) => item.requestId === request.id)
+    .flatMap((item) => item.checklist)
+    .some((item) => item.requirement === "Mandatory" && item.status !== "Approved");
+  if (!outstanding) return { state, error: "Every mandatory document is already approved. No invitation is needed." };
+  const expires = new Date();
+  expires.setDate(expires.getDate() + 14);
+  const invitation = {
+    id: uid("inv"),
+    applicationId: "",
+    requestId: request.id,
+    contactId: contact.id,
+    email: contact.email.trim(),
+    mobile: contact.mobile,
+    expiresAt: expires.toISOString(),
+    template: "Service document checklist",
+    message: `Upload the outstanding documents for ${request.number}.`,
+    status: "Sent" as const,
+    sentAt: new Date().toISOString(),
+    sentBy: actor.id,
+  };
+  const next = notice(
+    withAudit({ ...state, invitations: [invitation, ...state.invitations] }, actor.id, "Invite", "Service Request", request.number, {
+      detail: `Portal invitation sent to ${invitation.email}.`,
+    }),
+    "Customer portal invitation",
+    `${contact.name} can upload documents for ${request.number}.`,
+    `/service-requests/${request.id}`,
+    request.assigneeId,
+  );
+  return { state: next };
+}
+
+export function uploadServiceDocument(state: State, itemId: string, fileName: string, uploadedBy: string): { state: State; error?: string } {
+  const instance = state.serviceInstances.find((item) => item.checklist.some((row) => row.id === itemId));
+  const item = instance?.checklist.find((row) => row.id === itemId);
+  if (!instance || !item) return { state, error: "This document is not on an open service checklist." };
+  if (item.status === "Approved") return { state, error: "This document is already approved." };
+  const master = state.documents.find((doc) => doc.code === item.documentCode);
+  if (master && fileName) {
+    const ext = fileName.split(".").pop()?.toLowerCase() ?? "";
+    if (!master.fileTypes.map((type) => type.toLowerCase().replace(".", "")).includes(ext)) {
+      return { state, error: `Use one of these types: ${master.fileTypes.join(", ")}.` };
+    }
+  }
+  const request = state.serviceRequests.find((row) => row.id === instance.requestId);
+  const nextInstance: ServiceInstance = {
+    ...instance,
+    checklist: instance.checklist.map((row) => (row.id === itemId ? { ...row, status: "Uploaded", fileName, rejectionReason: undefined } : row)),
+  };
+  let next = replaceInstance(state, nextInstance, { id: uploadedBy } as User, "Upload document", `${item.name} uploaded as ${fileName}.`, item.status);
+  next = notice(next, "Document uploaded", `${item.name} is waiting for review on ${request?.number ?? instance.requestId}.`, `/service-requests/${instance.requestId}`, instance.assigneeId);
+  return { state: next };
+}
+
+export function transitionService(
+  state: State,
+  instanceId: string,
+  action: "start" | "review" | "docs-complete" | "process" | "hold" | "resume" | "complete" | "reject" | "cancel" | "save-assessment-draft" | "finalize-assessment",
+  actor: User,
+  extra?: { reason?: string; result?: ServiceInstance["assessmentResult"]; remarks?: string; periodId?: string },
+): { state: State; error?: string } {
+  const instance = state.serviceInstances.find((item) => item.id === instanceId);
+  if (!instance) return { state, error: "Service instance not found." };
+  if (isTerminal(instance.status) && action !== "resume") return { state, error: "A completed, rejected, or cancelled service is read-only." };
+  const now = new Date().toISOString();
+  const reason = extra?.reason?.trim() ?? "";
+  let next: ServiceInstance = { ...instance };
+
+  if (action === "start") {
+    if (instance.status !== "Draft") return { state, error: "Only a draft service can be started." };
+    next = { ...instance, status: "Documents Pending", startedAt: now };
+  } else if (action === "review") {
+    if (instance.status !== "Documents Pending") return { state, error: "Documents can be sent for review only while collection is open." };
+    next = { ...instance, status: "Documents Under Review" };
+  } else if (action === "docs-complete") {
+    if (instance.status !== "Documents Under Review" && instance.status !== "Documents Pending") {
+      return { state, error: "Documentation can be completed only during collection or review." };
+    }
+    if (!mandatoryApproved(instance)) return { state, error: "All mandatory documents must be approved before documentation is completed." };
+    next = { ...instance, status: "Documentation Completed" };
+  } else if (action === "process") {
+    if (instance.status !== "Documentation Completed") return { state, error: "Service processing starts after documentation is completed." };
+    if (instance.assessmentRequired && instance.assessmentStatus !== "Finalized") {
+      return { state, error: "Financial assessment must be finalized before this service can be processed." };
+    }
+    next = { ...instance, status: "Under Processing" };
+  } else if (action === "save-assessment-draft") {
+    if (!instance.assessmentRequired) return { state, error: "Financial assessment is not enabled for this service." };
+    if (instance.assessmentStatus === "Finalized") return { state, error: "A finalized assessment cannot be returned to draft." };
+    next = {
+      ...instance,
+      assessmentStatus: "Pending",
+      assessmentResult: extra?.result,
+      assessmentRemarks: extra?.remarks?.trim() || undefined,
+      financialPeriodId: extra?.periodId || undefined,
+    };
+  } else if (action === "finalize-assessment") {
+    if (!instance.assessmentRequired) return { state, error: "Financial assessment is not enabled for this service." };
+    if (!extra?.periodId) return { state, error: "A financial reporting period is required." };
+    if (!extra?.result) return { state, error: "Assessment result is required." };
+    if (!extra.remarks?.trim()) return { state, error: "Assessment remarks are required." };
+    const requestForPeriod = state.serviceRequests.find((row) => row.id === instance.requestId);
+    const customerForPeriod = state.customers.find((row) => row.id === requestForPeriod?.customerId);
+    const period = customerForPeriod?.turnovers?.find((row) => row.id === extra.periodId);
+    if (!period) return { state, error: "Select a turnover period saved on the customer." };
+    next = {
+      ...instance,
+      assessmentStatus: "Finalized",
+      assessmentResult: extra.result,
+      assessmentRemarks: extra.remarks.trim(),
+      financialPeriodId: period.id,
+      reviewedBy: actor.id,
+      reviewedAt: now,
+      assessmentSnapshot: { from: period.from, to: period.to, sales: period.sales, pos: period.pos, bank: period.bank, source: period.source },
+    };
+  } else if (action === "hold") {
+    if (instance.status === "On Hold" || isTerminal(instance.status) || instance.status === "Draft") {
+      return { state, error: "This service cannot be placed on hold from its current status." };
+    }
+    if (!reason) return { state, error: "A hold reason is required." };
+    next = { ...instance, status: "On Hold", heldFrom: instance.status, holdReason: reason };
+  } else if (action === "resume") {
+    if (instance.status !== "On Hold" || !instance.heldFrom) return { state, error: "Only a held service can be resumed." };
+    if (!mandatoryApproved({ ...instance, status: instance.heldFrom }) && (instance.heldFrom === "Documentation Completed" || instance.heldFrom === "Under Processing")) {
+      return { state, error: "Expired or unapproved mandatory documents must be resolved before the service resumes." };
+    }
+    next = { ...instance, status: instance.heldFrom, holdReason: undefined };
+  } else if (action === "complete") {
+    if (instance.status === "On Hold") return { state, error: "Resume the service before completing it." };
+    if (instance.status !== "Under Processing") return { state, error: "The service must be under processing before it can be completed." };
+    if (!mandatoryApproved(instance)) return { state, error: "Mandatory documents must be approved and valid." };
+    if (instance.assessmentRequired && instance.assessmentStatus !== "Finalized") return { state, error: "Financial assessment must be finalized." };
+    if (!reason) return { state, error: "Completion remarks are required." };
+    next = { ...instance, status: "Completed", completedAt: now, remarks: reason };
+  } else if (action === "reject") {
+    if (instance.status === "Draft" || instance.status === "On Hold") return { state, error: "A draft or held service is cancelled, not rejected." };
+    if (!reason) return { state, error: "A closure reason is required." };
+    next = { ...instance, status: "Rejected", completedAt: now, closureReason: reason };
+  } else if (action === "cancel") {
+    if (!reason) return { state, error: "A closure reason is required." };
+    next = { ...instance, status: "Cancelled", completedAt: now, closureReason: reason };
+  }
+
+  const label: Record<typeof action, string> = {
+    start: "Start service",
+    review: "Send documents for review",
+    "docs-complete": "Complete documentation",
+    process: "Start processing",
+    "save-assessment-draft": "Save assessment draft",
+    hold: "Hold service",
+    resume: "Resume service",
+    complete: "Complete service",
+    reject: "Reject service",
+    cancel: "Cancel service",
+    "finalize-assessment": "Finalize assessment",
+  };
+  let recorded = replaceInstance(state, next, actor, label[action], reason || next.status, instance.status);
+  const href = `/service-requests/${instance.requestId}`;
+  if (action === "hold") recorded = notice(recorded, "Service put on hold", `${instance.id} is on hold. ${reason}`, href, instance.assigneeId);
+  if (action === "complete") recorded = notice(recorded, "Service completed", `${instance.id} was completed.`, href, instance.assigneeId);
+  return { state: recorded };
+}
+
+export function saveServiceActivity(
+  state: State,
+  input: Omit<ServiceActivity, "id" | "createdAt" | "status"> & { id?: string; status?: ServiceActivity["status"] },
+  actor: User,
+): { state: State; error?: string } {
+  const subject = input.subject.trim();
+  if (!subject) return { state, error: "Subject is required." };
+  if (subject.length > 200) return { state, error: "Subject must be 200 characters or fewer." };
+  if (!input.type) return { state, error: "Activity type is required." };
+  const assignee = state.users.find((item) => item.id === input.assigneeId && item.status === "Active");
+  if (!assignee) return { state, error: "Assigned employee must be an active user." };
+  if ((input.type === "Task" || input.type === "Follow-up") && !input.due) return { state, error: "Due date is required for a task or follow-up." };
+  const request = state.serviceRequests.find((item) => item.id === input.requestId);
+  const href = `/service-requests/${input.requestId}`;
+  const existing = input.id ? state.serviceActivities.find((item) => item.id === input.id) : undefined;
+  if (existing && (existing.status === "Completed" || existing.status === "Cancelled")) {
+    return { state, error: "Completed and cancelled activities cannot be edited." };
+  }
+  if (existing) {
+    const previousDue = input.due && existing.due && input.due !== existing.due ? existing.due : existing.previousDue;
+    const nextActivity: ServiceActivity = { ...existing, ...input, subject, previousDue };
+    let next = withAudit(
+      { ...state, serviceActivities: state.serviceActivities.map((item) => (item.id === existing.id ? nextActivity : item)) },
+      actor.id,
+      previousDue && previousDue !== existing.previousDue ? "Reschedule follow-up" : "Update activity",
+      "Service Request",
+      request?.number ?? input.requestId,
+      { detail: subject, previous: existing.due, next: input.due },
+    );
+    if (existing.assigneeId !== assignee.id) next = notice(next, "Activity reassigned", subject, href, assignee.id);
+    return { state: next };
+  }
+  const activity: ServiceActivity = {
+    ...input,
+    id: uid("act"),
+    subject,
+    status: "Pending",
+    createdAt: new Date().toISOString(),
+  };
+  let next = withAudit(
+    { ...state, serviceActivities: [activity, ...state.serviceActivities] },
+    actor.id,
+    "Create activity",
+    "Service Request",
+    request?.number ?? input.requestId,
+    { detail: `${activity.type}: ${subject}` },
+  );
+  next = notice(next, "Activity assigned", `${activity.type}: ${subject}`, href, assignee.id);
+  if (activity.type === "Follow-up" && activity.due) next = notice(next, "Follow-up due", `${subject} is due ${activity.due}.`, href, assignee.id);
+  return { state: next };
+}
+
+export function progressServiceActivity(
+  state: State,
+  activityId: string,
+  action: "start" | "complete" | "cancel",
+  actor: User,
+  remarks?: string,
+): { state: State; error?: string } {
+  const activity = state.serviceActivities.find((item) => item.id === activityId);
+  if (!activity) return { state, error: "Activity not found." };
+  if (activity.status === "Completed" || activity.status === "Cancelled") return { state, error: "This activity is closed." };
+  const note = remarks?.trim() ?? "";
+  const request = state.serviceRequests.find((item) => item.id === activity.requestId);
+  let nextActivity = activity;
+  if (action === "start") nextActivity = { ...activity, status: "In Progress" };
+  if (action === "complete") {
+    if (!note) return { state, error: "Completion remarks are required." };
+    nextActivity = { ...activity, status: "Completed", completionRemarks: note, completedBy: actor.id, completedAt: new Date().toISOString() };
+  }
+  if (action === "cancel") {
+    if (!note) return { state, error: "A cancellation reason is required." };
+    nextActivity = { ...activity, status: "Cancelled", cancelReason: note };
+  }
+  const next = withAudit(
+    { ...state, serviceActivities: state.serviceActivities.map((item) => (item.id === activity.id ? nextActivity : item)) },
+    actor.id,
+    action === "complete" ? "Complete activity" : action === "cancel" ? "Cancel activity" : "Start activity",
+    "Service Request",
+    request?.number ?? activity.requestId,
+    { previous: activity.status, next: nextActivity.status, detail: note || activity.subject },
+  );
+  return { state: next };
+}
+
+export function saveLoanDelivery(state: State, input: Omit<LoanDeliveryRecord, "id"> & { id?: string }, actor: User): { state: State; error?: string } {
+  if (!input.bank) return { state, error: "Bank delivered is required." };
+  if (input.bank === "Other" && !input.otherBank?.trim()) return { state, error: "Other bank name is required." };
+  if (!input.loanType.trim() || !input.date) return { state, error: "Loan type and delivery date are required." };
+  if (Number.isNaN(input.value) || input.value < 0) return { state, error: "Delivery value must be zero or greater." };
+  const request = state.serviceRequests.find((item) => item.id === input.requestId);
+  const record: LoanDeliveryRecord = { ...input, id: input.id ?? uid("ldv"), loanType: input.loanType.trim(), otherBank: input.otherBank?.trim() || undefined };
+  const exists = state.loanDeliveries.some((item) => item.id === record.id);
+  const loanDeliveries = exists ? state.loanDeliveries.map((item) => (item.id === record.id ? record : item)) : [record, ...state.loanDeliveries];
+  return {
+    state: withAudit({ ...state, loanDeliveries }, actor.id, exists ? "Update delivery" : "Record delivery", "Service Request", request?.number ?? input.requestId, {
+      detail: `${record.bank} · ${record.loanType}`,
+    }),
+  };
+}
+
+export function addExtraction(
+  state: State,
+  input: Omit<ExtractionRecord, "id" | "status" | "extractedValue"> & { extractedValue?: string },
+  actor: User,
+): { state: State; error?: string } {
+  if (!input.customerId || !input.documentName.trim() || !input.field.trim()) return { state, error: "Customer, document, and field are required." };
+  const row: ExtractionRecord = {
+    ...input,
+    id: uid("ext"),
+    documentName: input.documentName.trim(),
+    field: input.field.trim(),
+    extractedValue: input.extractedValue?.trim() ?? "",
+    verifiedValue: input.verifiedValue?.trim() ?? "",
+    status: "Pending Review",
+  };
+  const customer = state.customers.find((item) => item.id === row.customerId);
+  return {
+    state: withAudit({ ...state, extractions: [row, ...state.extractions] }, actor.id, "Prepare extraction", "AI", customer?.code ?? row.customerId, {
+      detail: "No extraction provider is configured. The extracted value was left blank for manual review.",
+    }),
+  };
+}
+
+export function reviewExtraction(state: State, id: string, decision: "Verified" | "Rejected", verifiedValue: string, actor: User): { state: State; error?: string } {
+  const row = state.extractions.find((item) => item.id === id);
+  if (!row) return { state, error: "Extraction record not found." };
+  if (row.status === "Verified" && decision === "Verified" && verifiedValue.trim() !== row.verifiedValue) {
+    return { state, error: "A verified value cannot be replaced by a new extraction. Edit it on the customer financial record." };
+  }
+  const value = verifiedValue.trim();
+  if (decision === "Verified" && !value) return { state, error: "Enter the verified value before confirming it." };
+  let nextState: State = {
+    ...state,
+    extractions: state.extractions.map((item) => (item.id === id ? { ...item, status: decision, verifiedValue: decision === "Verified" ? value : item.verifiedValue } : item)),
+  };
+  if (decision === "Verified" && row.periodFrom && row.periodTo) {
+    const customer = state.customers.find((item) => item.id === row.customerId);
+    if (customer) {
+      const periods = customer.turnovers ?? [];
+      const same = periods.find((item) => item.from === row.periodFrom && item.to === row.periodTo);
+      const amount = Number(value);
+      const numeric = Number.isFinite(amount) ? amount : 0;
+      if (same?.source === "Reviewed Document") {
+        nextState = withAudit(nextState, actor.id, "Verify extraction", "AI", customer.code, {
+          detail: `${row.field} verified. The existing reviewed period was left unchanged.`,
+        });
+        return { state: nextState };
+      }
+      const key = row.field.toLowerCase().includes("pos") ? "pos" : row.field.toLowerCase().includes("bank") ? "bank" : row.field.toLowerCase().includes("sales") ? "sales" : "";
+      if (key) {
+        const period = same ?? { id: uid("trn"), from: row.periodFrom, to: row.periodTo, sales: 0, pos: 0, bank: 0, source: "Reviewed Document" as const };
+        const updated = { ...period, [key]: numeric, source: "Reviewed Document" as const };
+        const turnovers = same ? periods.map((item) => (item.id === same.id ? updated : item)) : [...periods, updated];
+        nextState = { ...nextState, customers: nextState.customers.map((item) => (item.id === customer.id ? { ...item, turnovers } : item)) };
+      }
+    }
+  }
+  const customer = state.customers.find((item) => item.id === row.customerId);
+  return {
+    state: withAudit(nextState, actor.id, decision === "Verified" ? "Verify extraction" : "Reject extraction", "AI", customer?.code ?? row.customerId, {
+      detail: `${row.field}: ${decision}`,
+    }),
+  };
 }
 
 export function finalizeStatements(state: State, customerId: string, actor: User): State {

@@ -5,6 +5,33 @@ import { currentUser } from "./access";
 import { createSeed } from "./seed";
 import type { State } from "./types";
 
+function withServiceModel(state: State): State {
+  const seed = createSeed();
+  return {
+    ...state,
+    customers: state.customers.map((customer) => {
+      const seeded = seed.customers.find((item) => item.id === customer.id);
+      return {
+        ...customer,
+        turnovers: customer.turnovers ?? seeded?.turnovers ?? [],
+        averageBalances: customer.averageBalances ?? seeded?.averageBalances ?? [],
+      };
+    }),
+    services: state.services ?? seed.services,
+    serviceRequests: state.serviceRequests ?? seed.serviceRequests,
+    serviceInstances: state.serviceInstances ?? seed.serviceInstances,
+    serviceActivities: state.serviceActivities ?? seed.serviceActivities,
+    loanDeliveries: state.loanDeliveries ?? seed.loanDeliveries,
+    extractions: state.extractions ?? seed.extractions,
+    counters: {
+      ...seed.counters,
+      ...state.counters,
+      request: state.counters?.request ?? seed.counters.request,
+      serviceInstance: state.counters?.serviceInstance ?? seed.counters.serviceInstance,
+    },
+  };
+}
+
 const KEY = "vrw-crm-state";
 
 type StoreValue = {
@@ -21,7 +48,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     try {
       const raw = sessionStorage.getItem(KEY);
-      if (raw) setState(JSON.parse(raw) as State);
+      if (raw) setState(withServiceModel(JSON.parse(raw) as State));
       else setState(createSeed());
     } catch {
       setState(createSeed());

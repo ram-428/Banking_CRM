@@ -145,7 +145,39 @@ export type AuditYear = {
   attachment?: string;
   remarks?: string;
 };
-export type ChequeBounce = { id: string; date: string; amount: number; status: string; remarks: string };
+export type TurnoverSource = "Manual" | "AI Extracted" | "Reviewed Document";
+
+export type TurnoverPeriod = {
+  id: string;
+  from: string;
+  to: string;
+  sales: number;
+  pos: number;
+  bank: number;
+  source: TurnoverSource;
+  remarks?: string;
+};
+
+export type AverageBalance = {
+  id: string;
+  bank: string;
+  otherBank?: string;
+  from: string;
+  to: string;
+  average: number;
+  source: TurnoverSource;
+};
+
+export type ChequeBounce = {
+  id: string;
+  date: string;
+  amount: number;
+  status: string;
+  remarks: string;
+  bank?: string;
+  otherBank?: string;
+  bounceCount?: number;
+};
 
 export type ProfileStatus =
   | "Not Started"
@@ -215,6 +247,8 @@ export type Customer = {
   vatReturns: VatReturn[];
   audits: AuditYear[];
   bounces: ChequeBounce[];
+  turnovers?: TurnoverPeriod[];
+  averageBalances?: AverageBalance[];
   statement?: StatementInsight;
   leadStatus: LeadStatus;
   leadSource?: string;
@@ -468,6 +502,7 @@ export type FollowUp = {
 export type Invitation = {
   id: string;
   applicationId: string;
+  requestId?: string;
   contactId: string;
   email: string;
   mobile: string;
@@ -498,6 +533,7 @@ export type Notice = {
   href: string;
   read: boolean;
   at: string;
+  userId?: string;
 };
 
 export type DocCategory = {
@@ -543,6 +579,127 @@ export type ChecklistRule = {
   condition?: { field: "moaAmendments" | "exposures" | "chequeBounce"; operator: ">" | "="; value: string };
 };
 
+export type ServiceDocStatus = "Pending" | "Uploaded" | "Under Review" | "Approved" | "Rejected" | "Expired";
+
+export type ServiceChecklistItem = {
+  id: string;
+  documentCode: string;
+  name: string;
+  requirement: "Mandatory" | "Optional";
+  status: ServiceDocStatus;
+  rejectionReason?: string;
+  linkedFrom?: string;
+  fileName?: string;
+};
+
+export type ServiceDefinition = {
+  id: string;
+  name: string;
+  status: "Active" | "Inactive";
+  financialAssessment: boolean;
+  documentCodes: string[];
+};
+
+export type ServiceStatus =
+  | "Draft"
+  | "Documents Pending"
+  | "Documents Under Review"
+  | "Documentation Completed"
+  | "Under Processing"
+  | "On Hold"
+  | "Completed"
+  | "Rejected"
+  | "Cancelled";
+
+export type ParentRequestStatus = "Draft" | "In Progress" | "On Hold" | "Completed" | "Cancelled" | "Closed – Mixed Outcome";
+
+export type AssessmentResult = "Satisfactory" | "Requires Clarification" | "Not Satisfactory";
+
+export type ServiceInstance = {
+  id: string;
+  requestId: string;
+  serviceId: string;
+  assigneeId: string;
+  status: ServiceStatus;
+  heldFrom?: ServiceStatus;
+  holdReason?: string;
+  startedAt?: string;
+  completedAt?: string;
+  remarks?: string;
+  assessmentRequired: boolean;
+  assessmentStatus: "Not required" | "Pending" | "Finalized";
+  assessmentResult?: AssessmentResult;
+  assessmentRemarks?: string;
+  financialPeriodId?: string;
+  assessmentSnapshot?: { from: string; to: string; sales: number; pos: number; bank: number; source: TurnoverSource };
+  reviewedBy?: string;
+  reviewedAt?: string;
+  checklist: ServiceChecklistItem[];
+  closureReason?: string;
+};
+
+export type ServiceActivityType = "Task" | "Follow-up" | "Call" | "Meeting" | "Other";
+export type ServiceActivityStatus = "Pending" | "In Progress" | "Completed" | "Cancelled";
+
+export type ServiceActivity = {
+  id: string;
+  instanceId: string;
+  requestId: string;
+  type: ServiceActivityType;
+  subject: string;
+  assigneeId: string;
+  due?: string;
+  description?: string;
+  status: ServiceActivityStatus;
+  completionRemarks?: string;
+  completedBy?: string;
+  completedAt?: string;
+  cancelReason?: string;
+  communicationWith?: "Customer" | "Bank" | "Other";
+  contact?: string;
+  notes?: string;
+  previousDue?: string;
+  createdAt: string;
+};
+
+export type LoanDeliveryRecord = {
+  id: string;
+  customerId: string;
+  instanceId: string;
+  requestId: string;
+  bank: string;
+  otherBank?: string;
+  loanType: string;
+  date: string;
+  value: number;
+  remarks?: string;
+};
+
+export type ExtractionRecord = {
+  id: string;
+  customerId: string;
+  documentName: string;
+  field: string;
+  extractedValue: string;
+  verifiedValue: string;
+  status: "Pending Review" | "Verified" | "Rejected";
+  periodFrom?: string;
+  periodTo?: string;
+};
+
+export type ServiceRequestRecord = {
+  id: string;
+  number: string;
+  customerId: string;
+  requestDate: string;
+  assigneeId: string;
+  priority: "Normal" | "High";
+  remarks?: string;
+  createdAt: string;
+  updatedAt: string;
+  previousRequestId?: string;
+};
+
 export type Counters = {
   customer: number;
   application: number;
@@ -551,6 +708,8 @@ export type Counters = {
   followUp: number;
   user: number;
   document: number;
+  request: number;
+  serviceInstance: number;
 };
 
 export type State = {
@@ -573,6 +732,12 @@ export type State = {
   categories: DocCategory[];
   documents: DocumentMaster[];
   rules: ChecklistRule[];
+  services: ServiceDefinition[];
+  serviceRequests: ServiceRequestRecord[];
+  serviceInstances: ServiceInstance[];
+  serviceActivities: ServiceActivity[];
+  loanDeliveries: LoanDeliveryRecord[];
+  extractions: ExtractionRecord[];
   counters: Counters;
   sessionUserId: string | null;
   portalEmail: string | null;

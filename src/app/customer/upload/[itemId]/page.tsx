@@ -4,7 +4,7 @@ import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { PortalShell } from "@/components/portal-shell";
 import { Button, Field } from "@/components/ui";
-import { uploadDocument } from "@/lib/actions";
+import { uploadDocument, uploadServiceDocument } from "@/lib/actions";
 import { fileAllowed } from "@/lib/format";
 import { useStore } from "@/lib/store";
 
@@ -13,6 +13,7 @@ export default function UploadPage() {
   const { state, replace } = useStore();
   const router = useRouter();
   const item = state?.checklist.find((row) => row.id === itemId);
+  const serviceItem = (state?.serviceInstances ?? []).flatMap((instance) => instance.checklist).find((row) => row.id === itemId);
   const master = state?.documents.find((doc) => doc.code === item?.documentCode);
   const [fileName, setFileName] = useState("");
   const [issueDate, setIssueDate] = useState("");
@@ -30,7 +31,31 @@ export default function UploadPage() {
     if (state && !state.portalEmail) router.replace("/customer");
   }, [state, router]);
 
-  if (!state || !item || !state.portalEmail) return null;
+  if (!state || !state.portalEmail) return null;
+  if (!item && serviceItem) {
+    const masterForService = state.documents.find((doc) => doc.code === serviceItem.documentCode);
+    return (
+      <PortalShell email={state.portalEmail} back={{ href: "/customer/home", label: "Checklist" }}>
+        <p className="portal-kicker">Service document</p>
+        <h1 className="portal-title">{serviceItem.name}</h1>
+        <p className="lede portal-lede">The file is stored and marked Uploaded. The desk still has to approve it.</p>
+        {serviceItem.rejectionReason && <div className="banner banner-warn">Last rejection: {serviceItem.rejectionReason}</div>}
+        {error && <div className="banner banner-danger">{error}</div>}
+        <label className={over ? "dropzone is-over" : fileName ? "dropzone is-ready" : "dropzone"} onDragOver={(event) => { event.preventDefault(); setOver(true); }} onDragLeave={() => setOver(false)} onDrop={(event) => { event.preventDefault(); setOver(false); const file = event.dataTransfer.files?.[0]; if (file) take(file); }}>
+          <input type="file" accept={masterForService?.fileTypes.map((type) => `.${type}`).join(",") || ".pdf,.jpg,.png"} onChange={(event) => { const file = event.target.files?.[0]; if (file) take(file); }} />
+          <strong>{fileName || "Choose a file"}</strong>
+        </label>
+        <Button type="button" onClick={() => {
+          if (!fileName) { setError("Choose a file."); return; }
+          const result = uploadServiceDocument(state, serviceItem.id, fileName, state.portalEmail ?? "Customer");
+          if (result.error) { setError(result.error); return; }
+          replace(result.state);
+          router.push("/customer/home");
+        }}>Send file</Button>
+      </PortalShell>
+    );
+  }
+  if (!item) return null;
   const previous = state.versions.filter((version) => version.checklistItemId === item.id);
   const latest = previous[0];
   const isStatement = item.documentCode === "DOC-BS";

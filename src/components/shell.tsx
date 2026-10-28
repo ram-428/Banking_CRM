@@ -157,6 +157,9 @@ const CRUMB: Record<string, string> = {
   "follow-ups": "Follow-ups",
   leads: "Lead list",
   applications: "Application list",
+  "service-requests": "Service request list",
+  "service-master": "Service master",
+  "work-queue": "My work queue",
   customers: "Customer profiles",
   verification: "Verification queue",
   financials: "Financial profiles",
@@ -266,7 +269,8 @@ export function Shell({ children }: { children: React.ReactNode }) {
   if (!ready || !state || !user) return <DeskSkeleton />;
 
   const groups = navFor(state);
-  const unread = state.notices.filter((item) => !item.read);
+  const visibleNotices = state.notices.filter((item) => !item.userId || item.userId === user.id);
+  const unread = visibleNotices.filter((item) => !item.read);
   const crumbs = pathname.split("/").filter(Boolean).map((segment, index, all) => ({
     href: `/${all.slice(0, index + 1).join("/")}`,
     label: crumbLabel(segment),
@@ -394,7 +398,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
               </button>
               {menu === "bell" && (
                 <div className="menu" style={{ width: 320 }}>
-                  {state.notices.slice(0, 6).map((item) => (
+                  {visibleNotices.slice(0, 6).map((item) => (
                     <Link key={item.id} href={item.href} onClick={() => replace(markNotice(state, item.id))}>
                       <strong>{item.title}</strong>
                       <div className="hint">{item.detail}</div>
