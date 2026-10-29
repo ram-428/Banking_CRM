@@ -73,9 +73,9 @@ export default function WorkQueuePage() {
         <DataTable>
           <thead>
             <tr>
+              <th>Request number</th>
               <th>Activity subject</th>
               <th>Customer</th>
-              <th>Request number</th>
               <th>Service</th>
               <th>Activity type</th>
               <th>Due date</th>
@@ -92,9 +92,9 @@ export default function WorkQueuePage() {
               const overdue = isOverdue(activity, today);
               return (
                 <tr key={activity.id}>
+                  <td>{request ? <Link className="link" href={`/service-requests/${request.id}`}>{request.number}</Link> : activity.requestId}</td>
                   <td>{activity.subject}</td>
                   <td>{customer?.name ?? "Unknown"}</td>
-                  <td>{request ? <Link className="link" href={`/service-requests/${request.id}`}>{request.number}</Link> : activity.requestId}</td>
                   <td>{service?.name ?? "Service"}</td>
                   <td>{activity.type}</td>
                   <td>{activity.due || "None"}</td>

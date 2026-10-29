@@ -968,7 +968,7 @@ export function createServiceRequest(
   if (!customer || customer.leadStatus === "Lost") return { state, error: "Select an active customer." };
   const unique = [...new Set(input.serviceIds)];
   if (unique.length === 0) return { state, error: "Select at least one active banking service." };
-  if (unique.length !== input.serviceIds.length) return { state, error: "The same banking service cannot be selected twice in one request." };
+  if (unique.length > 1) return { state, error: "A service request can contain only one banking service." };
   const chosen = unique.map((id) => state.services.find((item) => item.id === id));
   if (chosen.some((item) => !item || item.status !== "Active")) return { state, error: "Every selected service must be active." };
   const assignee = state.users.find((item) => item.id === input.assigneeId && item.status === "Active");
