@@ -12,9 +12,10 @@ import type { ModuleKey } from "@/lib/types";
 
 const ACTIONS: { href: string; label: string; module: ModuleKey; action?: "view" | "create" }[] = [
   { href: "/leads/new", label: "Create lead", module: "Leads", action: "create" },
-  { href: "/service-requests", label: "Service requests", module: "Applications" },
-  { href: "/verification", label: "Verification queue", module: "Verification" },
-  { href: "/work-queue", label: "My work queue", module: "Tasks" },
+  { href: "/applications/new", label: "New application", module: "Applications", action: "create" },
+  { href: "/applications", label: "Application list", module: "Applications" },
+  { href: "/verification", label: "Verification", module: "Verification" },
+  { href: "/tasks", label: "My tasks", module: "Tasks" },
   { href: "/users", label: "User list", module: "Users" },
   { href: "/roles", label: "Role permissions", module: "Users" },
 ];
@@ -133,13 +134,13 @@ export default function DashboardPage() {
       <div className="kpi-row">
         <Card href="/leads" label="Total customers" value={String(figures.customers.length)} hint="Companies on the desk" />
         <Card href="/leads" label="Total leads" value={String(figures.leads.length)} hint="Open, not converted or lost" tone="olive" />
-        <Card href="/service-requests" label="Active applications" value={String(figures.active.length)} hint="Still moving through the file" />
-        <Card href="/service-requests" label="Credit review" value={String(figures.credit.length)} hint="Waiting on a credit decision" tone="info" />
-        <Card href="/service-requests" label="Submitted to banks" value={String(figures.submitted.length)} hint="Overall status, not one bank" />
+        <Card href="/applications" label="Active applications" value={String(figures.active.length)} hint="Still moving through the file" />
+        <Card href="/applications" label="Credit review" value={String(figures.credit.length)} hint="Waiting on a credit decision" tone="info" />
+        <Card href="/applications" label="Submitted to banks" value={String(figures.submitted.length)} hint="Overall status, not one bank" />
         <Card href="/verification" label="Pending documents" value={String(figures.pendingDocs.length)} hint="Required items still short of approval" />
-        <Card href="/work-queue" label="Overdue tasks" value={String(figures.overdueTasks.length)} hint="Due before today" tone="info" />
-        <Card href="/service-requests" label="Approved applications" value={String(figures.approved.length)} hint="Approved or already disbursed" tone="olive" />
-        <Card href="/service-requests" label="Total disbursed" value={aed(figures.disbursed)} hint="Sum of delivery records" money />
+        <Card href="/tasks" label="Overdue tasks" value={String(figures.overdueTasks.length)} hint="Due before today" tone="info" />
+        <Card href="/applications" label="Approved applications" value={String(figures.approved.length)} hint="Approved or already disbursed" tone="olive" />
+        <Card href="/applications" label="Total disbursed" value={aed(figures.disbursed)} hint="Sum of delivery records" money />
       </div>
       <h2 className="block-title">Service requests</h2>
       <div className="kpi-row">
@@ -199,7 +200,7 @@ export default function DashboardPage() {
                 {rows.map((app) => {
                   const customer = state.customers.find((item) => item.id === app.customerId);
                   return (
-                    <Link className="board-card" key={app.id} href="/service-requests">
+                    <Link className="board-card" key={app.id} href={`/applications/${app.id}`}>
                       <b>{app.number}</b>
                       <span>{customer?.name}</span>
                       <span className="hint">{app.status}</span>
@@ -239,7 +240,7 @@ export default function DashboardPage() {
             {figures.myTasks.length === 0 && <p className="hint">No open tasks assigned to you.</p>}
             {figures.myTasks.slice(0, 5).map((task) => (
               <div className="dist-row" key={task.id}>
-                <Link className="link" href="/work-queue">
+                <Link className="link" href="/tasks">
                   {task.name}
                 </Link>
                 <span className={task.due < todayKey() ? "tone-danger status" : "hint"}>{formatDate(task.due)}</span>
@@ -263,7 +264,7 @@ export default function DashboardPage() {
             {figures.overdueApps.length === 0 && <p className="hint">No stage is past its expected completion.</p>}
             {figures.overdueApps.slice(0, 4).map((app) => (
               <div className="dist-row" key={app.id}>
-                <Link className="link" href="/service-requests">
+                <Link className="link" href={`/applications/${app.id}`}>
                   {app.number}
                 </Link>
                 <span className="tone-danger status">{app.currentStage}</span>

@@ -17,6 +17,17 @@ export default function ServiceMasterPage() {
   const [error, setError] = useState("");
 
   if (!state || !user) return null;
+  const activeDocuments = state.documents.filter((item) => item.status === "Active");
+  const selectedCount = activeDocuments.filter((item) => draft.documentCodes.includes(item.code)).length;
+
+  function setAll(selected: boolean) {
+    setDraft((current) => ({
+      ...current,
+      documentCodes: selected
+        ? Array.from(new Set([...current.documentCodes, ...activeDocuments.map((item) => item.code)]))
+        : current.documentCodes.filter((code) => !activeDocuments.some((item) => item.code === code)),
+    }));
+  }
 
   function edit(service?: ServiceDefinition) {
     setError("");
@@ -93,8 +104,18 @@ export default function ServiceMasterPage() {
               </select>
             </Field>
           </div>
-          <div className="fields" style={{ marginTop: 12 }}>
-            {state.documents.filter((item) => item.status === "Active").map((document) => (
+          <div className="check-toolbar">
+            <div className="check-toolbar-title">
+              <strong>Checklist documents</strong>
+              <span className="hint">{selectedCount} of {activeDocuments.length} selected</span>
+            </div>
+            <div className="row-actions">
+              <Button type="button" variant="secondary" disabled={selectedCount === activeDocuments.length} onClick={() => setAll(true)}>Select all</Button>
+              <Button type="button" variant="secondary" disabled={selectedCount === 0} onClick={() => setAll(false)}>Deselect all</Button>
+            </div>
+          </div>
+          <div className="fields" style={{ marginTop: 8 }}>
+            {activeDocuments.map((document) => (
               <label key={document.code} className="field">
                 <span>
                   <input type="checkbox" checked={draft.documentCodes.includes(document.code)} onChange={() => toggle(document.code)} /> {document.name}

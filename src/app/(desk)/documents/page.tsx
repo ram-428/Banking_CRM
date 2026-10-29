@@ -75,9 +75,9 @@ function blankRule(order: number): RuleDraft {
 }
 
 function tabFromQuery(value: string | null) {
-  if (value === "categories") return "Categories";
+  if (value === "documents") return "Documents";
   if (value === "rules") return "Checklist rules";
-  return "Documents";
+  return "Categories";
 }
 
 export default function DocumentsPage() {
@@ -93,8 +93,8 @@ export default function DocumentsPage() {
 
   function selectTab(next: string) {
     setTab(next);
-    const query = next === "Categories" ? "categories" : next === "Checklist rules" ? "rules" : "documents";
-    router.replace(`/documents?tab=${query}`, { scroll: false });
+    const query = next === "Documents" ? "documents" : next === "Checklist rules" ? "rules" : "";
+    router.replace(query ? `/documents?tab=${query}` : "/documents", { scroll: false });
   }
   const [category, setCategory] = useState<DocCategory | null>(null);
   const [document, setDocument] = useState<DocumentMaster | null>(null);

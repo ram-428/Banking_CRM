@@ -2,12 +2,44 @@
 
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
 import { currentUser } from "./access";
-import { expireServiceDocuments } from "./actions";
 import { createSeed } from "./seed";
 import type { State } from "./types";
 
+const EARLY_LENDING_CODES = ["DOC-TL", "DOC-MOA", "DOC-EID", "DOC-PP", "DOC-BS", "DOC-AFS", "DOC-EL", "DOC-RS", "DOC-CP", "DOC-LAF"];
+
+function withLendingSample(state: State, seed: State): State {
+  const seededService = seed.services.find((item) => item.id === "svc-lending");
+  const services = state.services.map((item) =>
+    item.id === "svc-lending" && seededService && item.documentCodes.length === EARLY_LENDING_CODES.length && EARLY_LENDING_CODES.every((code) => item.documentCodes.includes(code))
+      ? { ...item, documentCodes: seededService.documentCodes }
+      : item,
+  );
+  const lendingService = services.find((item) => item.id === "svc-lending");
+  if (!lendingService || state.serviceRequests.some((item) => item.id === "req-lending")) return { ...state, services };
+  const seededRequest = seed.serviceRequests.find((item) => item.id === "req-lending");
+  const seededInstance = seed.serviceInstances.find((item) => item.id === "si-lending");
+  const seededInvite = seed.invitations.find((item) => item.id === "inv-lending");
+  if (!seededRequest || !seededInstance || !seededInvite) return { ...state, services };
+  const n = (state.counters?.request ?? 0) + 1;
+  const number = `REQ-${String(n).padStart(4, "0")}`;
+  return {
+    ...state,
+    services,
+    serviceRequests: [{ ...seededRequest, number }, ...state.serviceRequests],
+    serviceInstances: [seededInstance, ...state.serviceInstances],
+    invitations: state.invitations.some((item) => item.id === seededInvite.id)
+      ? state.invitations
+      : [{ ...seededInvite, message: `Upload the documents for ${number}.` }, ...state.invitations],
+    counters: { ...state.counters, request: n },
+  };
+}
+
 function withServiceModel(state: State): State {
   const seed = createSeed();
+  return withLendingSample(withServiceModelBase(state, seed), seed);
+}
+
+function withServiceModelBase(state: State, seed: State): State {
   return {
     ...state,
     customers: state.customers.map((customer) => {
@@ -18,7 +50,9 @@ function withServiceModel(state: State): State {
         averageBalances: customer.averageBalances ?? seeded?.averageBalances ?? [],
       };
     }),
-    services: state.services ?? seed.services,
+    services: state.services
+      ? [...state.services, ...seed.services.filter((item) => !state.services.some((existing) => existing.id === item.id || existing.name.trim().toLowerCase() === item.name.toLowerCase()))]
+      : seed.services,
     serviceRequests: state.serviceRequests ?? seed.serviceRequests,
     serviceInstances: state.serviceInstances ?? seed.serviceInstances,
     serviceActivities: state.serviceActivities ?? seed.serviceActivities,
@@ -49,10 +83,10 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     try {
       const raw = sessionStorage.getItem(KEY);
-      if (raw) setState(expireServiceDocuments(withServiceModel(JSON.parse(raw) as State)));
-      else setState(expireServiceDocuments(createSeed()));
+      if (raw) setState(withServiceModel(JSON.parse(raw) as State));
+      else setState(createSeed());
     } catch {
-      setState(expireServiceDocuments(createSeed()));
+      setState(createSeed());
     }
   }, []);
 

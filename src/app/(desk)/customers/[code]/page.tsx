@@ -1,9 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { PortalInvitationPanel } from "@/components/portal-invitation-panel";
+import { CreateServiceRequestDialog } from "@/components/create-service-request-dialog";
 import { Button, ButtonLink, Field, PageHeader, StatusText, Tabs, DataTable } from "@/components/ui";
 import { can, userName } from "@/lib/access";
 import { updateCustomer, validateCustomerRecords } from "@/lib/actions";
@@ -12,7 +12,7 @@ import { aed, formatWhen, uid } from "@/lib/format";
 import { useDesk } from "@/lib/store";
 import type { Customer } from "@/lib/types";
 
-const TABS = ["Company Details", "Contacts", "Shareholders", "Compliance", "Banking Relationships", "Financial Information", "Existing Loans / Exposure", "Cheque Bounce Details", "Portal Invitation", "Activity History"];
+const TABS = ["Company Details", "Contacts", "Shareholders", "Compliance", "Banking Relationships", "Financial Information", "Existing Loans / Exposure", "Cheque Bounce Details", "Activity History"];
 
 export default function CustomerPage() {
   const params = useParams<{ code: string }>();
@@ -22,6 +22,8 @@ export default function CustomerPage() {
   const [draft, setDraft] = useState<Customer | null>(null);
   const [saved, setSaved] = useState(false);
   const [formError, setFormError] = useState("");
+  const [requestOpen, setRequestOpen] = useState(false);
+  const router = useRouter();
 
   useEffect(() => {
     if (customer) setDraft(structuredClone(customer));
@@ -29,6 +31,7 @@ export default function CustomerPage() {
 
   if (!state || !user || !customer || !draft) return null;
   const apps = state.applications.filter((item) => item.customerId === customer.id);
+  const requests = state.serviceRequests.filter((item) => item.customerId === customer.id);
   const canEdit = can(state, "Leads", "edit");
   const parent = state.customers.find((item) => item.id === draft.parentId);
 
@@ -58,7 +61,12 @@ export default function CustomerPage() {
         lede={`${customer.code} · ${draft.folderRef} · last change ${formatWhen(customer.updatedAt)} by ${userName(state, customer.updatedBy)}`}
         actions={
           <>
-            <ButtonLink href={`/service-requests?customer=${customer.id}`}>Create service request</ButtonLink>
+            {can(state, "Applications", "create") && (
+              <Button type="button" onClick={() => setRequestOpen(true)}>
+                Create service request
+              </Button>
+            )}
+            <ButtonLink href={`/applications/new?customer=${customer.id}`}>Create application</ButtonLink>
           </>
         }
       />
@@ -93,6 +101,29 @@ export default function CustomerPage() {
           ))}
         </p>
       )}
+      {requests.length > 0 && (
+        <p className="hint" style={{ marginBottom: 12 }}>
+          Service requests:{" "}
+          {requests.map((request) => (
+            <Link key={request.id} href={`/service-requests/${request.id}`} style={{ marginRight: 10 }}>
+              {request.number}
+            </Link>
+          ))}
+        </p>
+      )}
+      <CreateServiceRequestDialog
+        open={requestOpen}
+        state={state}
+        user={user}
+        customerId={customer.id}
+        lockCustomer
+        onClose={() => setRequestOpen(false)}
+        onCreated={(next, id) => {
+          replace(next);
+          setRequestOpen(false);
+          router.push(`/service-requests/${id}`);
+        }}
+      />
       <Tabs tabs={TABS} value={tab} onChange={setTab} />
       <fieldset disabled={!canEdit} style={{ border: 0, margin: 0, padding: 0 }}>
       {tab === "Company Details" && (
@@ -815,9 +846,6 @@ export default function CustomerPage() {
             </div>
           )}
         </div>
-      )}
-      {tab === "Portal Invitation" && (
-        <PortalInvitationPanel state={state} customerId={customer.id} user={user} onChange={replace} onError={setFormError} />
       )}
       {tab === "Activity History" && (
         <DataTable>

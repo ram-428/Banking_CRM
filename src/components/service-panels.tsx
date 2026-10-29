@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { FormDialog } from "@/components/form-dialog";
 import { Button, DataTable, Field } from "@/components/ui";
 import { userName } from "@/lib/access";
@@ -9,12 +9,16 @@ import { BANKS, LOAN_TYPES } from "@/lib/constants";
 import { aed } from "@/lib/format";
 import type { AssessmentResult, ServiceActivity, ServiceInstance, State, User } from "@/lib/types";
 
+export type PendingSubmit = (current: State) => { state: State; error?: string };
+
 export function ServicePanels({
   state,
   instance,
   customerId,
   user,
   locked,
+  mode = "view",
+  submitRef,
   onChange,
   onError,
 }: {
@@ -23,6 +27,8 @@ export function ServicePanels({
   customerId: string;
   user: User;
   locked: boolean;
+  mode?: "view" | "edit";
+  submitRef?: { current: PendingSubmit | null };
   onChange: (next: State) => void;
   onError: (message: string) => void;
 }) {
@@ -85,32 +91,95 @@ export function ServicePanels({
     }
   }
 
-  function saveDelivery() {
-    const outcome = saveLoanDelivery(
-      state,
-      {
-        id: delivery?.id,
-        customerId,
-        instanceId: instance.id,
-        requestId: instance.requestId,
-        bank,
-        otherBank,
-        loanType,
-        date,
-        value: Number(value),
-        remarks: deliveryRemarks,
-      },
-      user,
-    );
-    if (outcome.error) onError(outcome.error);
-    else {
-      onError("");
-      onChange(outcome.state);
+  const assessmentOpen = instance.assessmentRequired && instance.assessmentStatus !== "Finalized" && !locked;
+  const assessmentDirty =
+    assessmentOpen &&
+    (result !== (instance.assessmentResult ?? "Satisfactory") ||
+      remarks !== (instance.assessmentRemarks ?? "") ||
+      (periodId !== "" && periodId !== (instance.financialPeriodId ?? periods[0]?.id ?? "")));
+  const deliveryDirty =
+    !locked &&
+    (delivery
+      ? bank !== delivery.bank ||
+        otherBank !== (delivery.otherBank ?? "") ||
+        loanType !== delivery.loanType ||
+        date !== delivery.date ||
+        value !== String(delivery.value) ||
+        deliveryRemarks !== (delivery.remarks ?? "")
+      : Boolean(date || value || otherBank || deliveryRemarks));
+
+  function submitPending(current: State) {
+    let next = current;
+    if (assessmentDirty) {
+      const outcome = transitionService(next, instance.id, "save-assessment-draft", user, { result, remarks, periodId });
+      if (outcome.error) return outcome;
+      next = outcome.state;
     }
+    if (deliveryDirty) {
+      const outcome = saveLoanDelivery(
+        next,
+        {
+          id: delivery?.id,
+          customerId,
+          instanceId: instance.id,
+          requestId: instance.requestId,
+          bank,
+          otherBank,
+          loanType,
+          date,
+          value: Number(value),
+          remarks: deliveryRemarks,
+        },
+        user,
+      );
+      if (outcome.error) return outcome;
+      next = outcome.state;
+    }
+    return { state: next };
   }
 
-  return (
-    <div>
+  useEffect(() => {
+    if (!submitRef || mode !== "edit") return;
+    submitRef.current = submitPending;
+    return () => {
+      submitRef.current = null;
+    };
+  });
+
+  return mode === "view" ? (
+    <div className="svc-view">
+      <p className="hint">
+        {instance.assessmentRequired
+          ? summary
+            ? `Assessment ${instance.assessmentResult ?? "not set"}. ${summary.from} to ${summary.to}. Sales ${aed(summary.sales)}, POS ${aed(summary.pos)}, bank ${aed(summary.bank)}.`
+            : "Financial assessment is required. No turnover period is recorded yet."
+          : "Financial assessment is not required."}
+      </p>
+      <h3>Activities</h3>
+      {activities.length === 0 ? (
+        <p className="hint">No activities on this service.</p>
+      ) : (
+        <ul className="svc-lines">
+          {activities.map((activity) => (
+            <li key={activity.id}>
+              <strong>{activity.subject}</strong>
+              <span>{activity.type}</span>
+              <span>{userName(state, activity.assigneeId)}</span>
+              <span>{activity.due || "No due date"}</span>
+              <span>{activity.status}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+      <h3>Loan delivery</h3>
+      <p className="hint">
+        {delivery
+          ? `${delivery.bank === "Other" ? delivery.otherBank || "Other" : delivery.bank} · ${delivery.loanType} · ${delivery.date || "No date"} · ${aed(delivery.value)}`
+          : "Not recorded."}
+      </p>
+    </div>
+  ) : (
+    <div className="svc-edit">
       {instance.assessmentRequired && (
         <div className="fields">
           <Field label="Financial period" required>
@@ -140,16 +209,8 @@ export function ServicePanels({
           <Field label="Assessment remarks" required>
             <textarea value={remarks} disabled={instance.assessmentStatus === "Finalized" || locked} onChange={(event) => setRemarks(event.target.value)} />
           </Field>
-          {instance.assessmentStatus !== "Finalized" && !locked && (
+          {assessmentOpen && (
             <div className="row-actions">
-              <Button type="button" variant="secondary" onClick={() => {
-                const outcome = transitionService(state, instance.id, "save-assessment-draft", user, { result, remarks, periodId });
-                if (outcome.error) onError(outcome.error);
-                else {
-                  onError("");
-                  onChange(outcome.state);
-                }
-              }}>Save draft</Button>
               <Button type="button" onClick={finalize}>Finalize assessment</Button>
             </div>
           )}
@@ -162,7 +223,7 @@ export function ServicePanels({
       )}
       {!instance.assessmentRequired && <p className="hint">Financial assessment is not enabled for this service.</p>}
 
-      <h2 className="block-title">Activities</h2>
+      <h3>Activities</h3>
       <DataTable>
         <thead>
           <tr>
@@ -210,7 +271,7 @@ export function ServicePanels({
       </DataTable>
       {!locked && <Button type="button" variant="secondary" onClick={() => setOpen(true)}>Add activity</Button>}
 
-      <h2 className="block-title">Loan delivery</h2>
+      <h3>Loan delivery</h3>
       <div className="fields">
         <Field label="Bank delivered" required>
           <select value={bank} disabled={locked} onChange={(event) => setBank(event.target.value)}>
@@ -236,7 +297,6 @@ export function ServicePanels({
         <Field label="Remarks">
           <input value={deliveryRemarks} disabled={locked} onChange={(event) => setDeliveryRemarks(event.target.value)} />
         </Field>
-        {!locked && <Button type="button" onClick={saveDelivery}>{delivery ? "Update delivery" : "Record delivery"}</Button>}
       </div>
 
       <FormDialog open={open} title="Add activity" submitLabel="Save activity" wide onClose={() => setOpen(false)} onSubmit={saveActivity}>

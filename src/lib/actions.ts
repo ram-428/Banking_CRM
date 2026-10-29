@@ -1,13 +1,8 @@
 import { MODULES, noFlags } from "./constants";
-import { primaryContact } from "./access";
-import { fileAllowed, todayKey, uid } from "./format";
+import { uid } from "./format";
 import { applyBankRollup, captureSnapshot } from "./metrics";
 import { isTerminal, mandatoryApproved } from "./request-status";
-import { coverage, deriveStatus, isExpiredFile, isPeriodBased, latestExpiry, latestRejection, liveFiles } from "./service-documents";
 import type {
-  Invitation,
-  ServiceChecklistItem,
-  ServiceFile,
   RoleConfig,
   Agreement,
   Application,
@@ -967,7 +962,7 @@ function reusableDocument(state: State, customerId: string, code: string) {
 export function createServiceRequest(
   state: State,
   input: { customerId: string; serviceIds: string[]; assigneeId: string; priority: ServiceRequestRecord["priority"]; remarks?: string; previousRequestId?: string },
-  actor: User,
+  actor: Pick<User, "id">,
 ): { state: State; error?: string; id?: string } {
   const customer = state.customers.find((item) => item.id === input.customerId);
   if (!customer || customer.leadStatus === "Lost") return { state, error: "Select an active customer." };
@@ -1013,8 +1008,6 @@ export function createServiceRequest(
             documentCode: code,
             name: master?.name ?? code,
             requirement: "Mandatory" as const,
-            minFiles: state.rules.find((rule) => rule.documentCode === code && rule.status === "Active")?.minFiles ?? 1,
-            maxFiles: state.rules.find((rule) => rule.documentCode === code && rule.status === "Active")?.maxFiles,
             status: reusable ? ("Approved" as const) : ("Pending" as const),
             linkedFrom: reusable,
             fileName: reusable ? "Linked from an approved document" : undefined,
@@ -1061,7 +1054,6 @@ export function setChecklistStatus(state: State, instanceId: string, itemId: str
   if (isTerminal(instance.status) || instance.status === "On Hold") return { state, error: "This service is not open for document changes." };
   const item = instance.checklist.find((row) => row.id === itemId);
   if (!item) return { state, error: "Checklist item not found." };
-  if (item.files && item.files.length > 0) return { state, error: "This document has uploaded files. Approve or reject each file instead." };
   if (status === "Rejected" && !rejectionReason?.trim()) return { state, error: "A rejection reason is required." };
   const nextInstance: ServiceInstance = {
     ...instance,
@@ -1077,8 +1069,7 @@ export function setChecklistStatus(state: State, instanceId: string, itemId: str
   return { state: next };
 }
 
-/** Superseded by sendPortalInvitation, which also revokes obsolete links. Kept only for reference. */
-export function legacySendServiceInvitation(state: State, requestId: string, actor: User): { state: State; error?: string } {
+export function sendServiceInvitation(state: State, requestId: string, actor: User): { state: State; error?: string } {
   const request = state.serviceRequests.find((item) => item.id === requestId);
   const customer = state.customers.find((item) => item.id === request?.customerId);
   const contact = customer?.contacts.find((item) => item.email);
@@ -1114,6 +1105,52 @@ export function legacySendServiceInvitation(state: State, requestId: string, act
     request.assigneeId,
   );
   return { state: next };
+}
+
+export function createPortalServiceRequest(
+  state: State,
+  email: string,
+  input: { serviceIds: string[]; remarks?: string },
+): { state: State; error?: string; id?: string } {
+  const normalized = email.trim().toLowerCase();
+  const customer = state.customers.find((item) => item.contacts.some((contact) => contact.email.toLowerCase() === normalized));
+  const contact = customer?.contacts.find((item) => item.email.toLowerCase() === normalized);
+  if (!customer || !contact) return { state, error: "This email is not linked to a company on the desk." };
+  const assignee =
+    state.users.find((item) => item.id === customer.assignedTo && item.status === "Active") ??
+    state.users.find((item) => item.status === "Active");
+  if (!assignee) return { state, error: "No relationship manager is available to take this request." };
+  const created = createServiceRequest(
+    state,
+    { customerId: customer.id, serviceIds: input.serviceIds, assigneeId: assignee.id, priority: "Normal", remarks: input.remarks },
+    { id: `portal:${normalized}` },
+  );
+  if (created.error || !created.id) return created;
+  const request = created.state.serviceRequests.find((item) => item.id === created.id)!;
+  const expires = new Date();
+  expires.setDate(expires.getDate() + 14);
+  const invitation = {
+    id: uid("inv"),
+    applicationId: "",
+    requestId: request.id,
+    contactId: contact.id,
+    email: normalized,
+    mobile: contact.mobile,
+    expiresAt: expires.toISOString(),
+    template: "Service document checklist",
+    message: `You created ${request.number}. Upload the documents for each service.`,
+    status: "Opened" as const,
+    sentAt: new Date().toISOString(),
+    sentBy: assignee.id,
+  };
+  const next = notice(
+    { ...created.state, invitations: [invitation, ...created.state.invitations] },
+    "Customer service request",
+    `${contact.name} created ${request.number} for ${customer.name} on the customer portal.`,
+    `/service-requests/${request.id}`,
+    assignee.id,
+  );
+  return { state: next, id: request.id };
 }
 
 export function uploadServiceDocument(state: State, itemId: string, fileName: string, uploadedBy: string): { state: State; error?: string } {
@@ -1417,235 +1454,4 @@ export function finalizeStatements(state: State, customerId: string, actor: User
   const customer = state.customers.find((item) => item.id === customerId);
   if (!customer?.statement) return state;
   return updateCustomer(state, customerId, { statement: { ...customer.statement, status: "Finalized" }, profileStatus: "Ready for Review" }, actor, "Bank statement insights marked reviewed.");
-}
-
-// ---------------------------------------------------------------------------
-// Service document upload, verification, expiry, and portal invitations
-// ---------------------------------------------------------------------------
-
-export type DocumentUploader =
-  | { type: "Customer"; label: string }
-  | { type: "Employee"; user: User; receivedThrough: "Email" | "In Person" | "Other" };
-
-export type DocumentUploadInput = {
-  files: { name: string; size: number; dataUrl?: string }[];
-  reference?: string;
-  issueDate?: string;
-  expiryDate?: string;
-  periodFrom?: string;
-  periodTo?: string;
-  remarks?: string;
-};
-
-function findItem(state: State, itemId: string) {
-  const instance = state.serviceInstances.find((row) => row.checklist.some((item) => item.id === itemId));
-  const item = instance?.checklist.find((row) => row.id === itemId);
-  return { instance, item };
-}
-
-function withReviewFlag(instance: ServiceInstance): ServiceInstance {
-  const expired = instance.checklist.find((item) => item.status === "Expired");
-  return { ...instance, reviewFlag: expired ? `${expired.name} has expired and needs a replacement.` : undefined };
-}
-
-function settleItem(item: ServiceChecklistItem, today: string): ServiceChecklistItem {
-  const status = deriveStatus(item, today);
-  return {
-    ...item,
-    status,
-    expiryDate: latestExpiry(item, today),
-    rejectionReason: status === "Rejected" ? latestRejection(item) : undefined,
-    replacementAuthorized: status === "Expired",
-    fileName: item.files?.length ? item.files[item.files.length - 1].fileName : item.fileName,
-  };
-}
-
-export function submitServiceDocument(state: State, itemId: string, input: DocumentUploadInput, who: DocumentUploader): { state: State; error?: string } {
-  const { instance, item } = findItem(state, itemId);
-  if (!instance || !item) return { state, error: "This document is not on an open service checklist." };
-  if (isTerminal(instance.status) || instance.status === "On Hold") return { state, error: "This service is not open for document changes." };
-  const master = state.documents.find((doc) => doc.code === item.documentCode);
-  const today = todayKey();
-  if (who.type === "Customer" && master && !master.customerUpload) return { state, error: "This document is collected by the desk. Please contact your relationship manager." };
-  if (who.type === "Employee" && master && !master.internalUpload) return { state, error: "This document type cannot be uploaded internally." };
-  if (item.status === "Approved") return { state, error: "Approved documents cannot be replaced. The desk must authorize a replacement." };
-  if (item.status === "Uploaded" && !master?.multiple) return { state, error: "This document is already submitted and waiting for review." };
-  if (input.files.length === 0) return { state, error: "At least one file must be selected." };
-  if (!master?.multiple && input.files.length > 1) return { state, error: "This document accepts a single file." };
-  const live = liveFiles(item).length;
-  const max = item.maxFiles ?? Number.POSITIVE_INFINITY;
-  if (live + input.files.length > max) return { state, error: `At most ${max} files can be held for this document.` };
-  for (const file of input.files) {
-    if (master && !fileAllowed(file.name, master.fileTypes)) return { state, error: `${file.name}: this document accepts ${master.fileTypes.join(", ")}.` };
-    if (master && file.size > master.maxMb * 1024 * 1024) return { state, error: `${file.name} is larger than ${master.maxMb} MB.` };
-  }
-  const expiry = Boolean(master?.expiryApplicable);
-  if (expiry) {
-    if (master?.issueDateRequired && !input.issueDate) return { state, error: "Issue date is required." };
-    if (master?.expiryDateRequired && !input.expiryDate) return { state, error: "Expiry date is required." };
-    if (input.issueDate && input.expiryDate && input.expiryDate <= input.issueDate) return { state, error: "Expiry date must be later than the issue date." };
-    if (input.expiryDate && input.expiryDate < today) return { state, error: "This document has already expired. Upload a valid one." };
-  }
-  const period = isPeriodBased(item.documentCode);
-  if (period) {
-    if (!input.periodFrom || !input.periodTo) return { state, error: "Statement period from and to are required." };
-    if (input.periodTo < input.periodFrom) return { state, error: "Statement period to must not be earlier than the period from." };
-  }
-  if (who.type === "Employee" && !who.receivedThrough) return { state, error: "Select how the document was received." };
-
-  const uploadedBy = who.type === "Customer" ? who.label : who.user.id;
-  const now = new Date().toISOString();
-  const base = item.files?.length ?? 0;
-  const added: ServiceFile[] = input.files.map((file, index) => ({
-    id: uid("file"),
-    version: base + index + 1,
-    fileName: file.name,
-    size: file.size,
-    dataUrl: file.dataUrl,
-    uploadedBy,
-    uploadedByType: who.type,
-    receivedThrough: who.type === "Employee" ? who.receivedThrough : undefined,
-    uploadedAt: now,
-    reference: input.reference?.trim() || undefined,
-    issueDate: expiry ? input.issueDate || undefined : undefined,
-    expiryDate: expiry ? input.expiryDate || undefined : undefined,
-    periodFrom: period ? input.periodFrom : undefined,
-    periodTo: period ? input.periodTo : undefined,
-    remarks: input.remarks?.trim() || undefined,
-    status: "Uploaded",
-  }));
-  const nextItem = settleItem({ ...item, files: [...(item.files ?? []), ...added] }, today);
-  const nextInstance = withReviewFlag({ ...instance, checklist: instance.checklist.map((row) => (row.id === itemId ? nextItem : row)) });
-  const request = state.serviceRequests.find((row) => row.id === instance.requestId);
-  const actorRef = who.type === "Employee" ? who.user : ({ id: uploadedBy } as User);
-  const names = added.map((file) => file.fileName).join(", ");
-  const detail = who.type === "Employee" ? `${item.name} uploaded by an employee (received through ${who.receivedThrough}): ${names}.` : `${item.name} uploaded by the customer: ${names}.`;
-  let next = replaceInstance(state, nextInstance, actorRef, "Upload document", detail, item.status);
-  next = notice(next, "Document uploaded", `${item.name} is waiting for review on ${request?.number ?? instance.requestId}.`, `/service-requests/${instance.requestId}`, instance.assigneeId);
-  return { state: next };
-}
-
-export function decideServiceFile(
-  state: State,
-  instanceId: string,
-  itemId: string,
-  fileId: string,
-  decision: "Approved" | "Rejected",
-  actor: User,
-  input?: { reason?: string; remarks?: string },
-): { state: State; error?: string } {
-  const instance = state.serviceInstances.find((row) => row.id === instanceId);
-  const item = instance?.checklist.find((row) => row.id === itemId);
-  const file = item?.files?.find((row) => row.id === fileId);
-  if (!instance || !item || !file) return { state, error: "File not found." };
-  if (isTerminal(instance.status) || instance.status === "On Hold") return { state, error: "This service is not open for document changes." };
-  if (file.status !== "Uploaded") return { state, error: "This version has already been decided. Decisions are not overwritten." };
-  const master = state.documents.find((doc) => doc.code === item.documentCode);
-  const today = todayKey();
-  const reason = input?.reason?.trim() ?? "";
-  if (decision === "Rejected") {
-    if (!reason) return { state, error: "A rejection reason is required." };
-    if (reason.length > 1000) return { state, error: "The rejection reason can be at most 1,000 characters." };
-  } else {
-    if (master?.expiryApplicable && master.expiryDateRequired && !file.expiryDate) return { state, error: "Expiry date is missing. The document cannot be approved." };
-    if (file.expiryDate && file.expiryDate < today) return { state, error: "An expired document cannot be approved as valid." };
-    if (isPeriodBased(item.documentCode) && (!file.periodFrom || !file.periodTo)) return { state, error: "Statement period is missing. The document cannot be approved." };
-  }
-  const now = new Date().toISOString();
-  const decided: ServiceFile = {
-    ...file,
-    status: decision,
-    verifiedBy: actor.id,
-    verifiedAt: now,
-    rejectionReason: decision === "Rejected" ? reason : undefined,
-    reviewRemarks: input?.remarks?.trim() || undefined,
-  };
-  const nextItem = settleItem({ ...item, files: (item.files ?? []).map((row) => (row.id === fileId ? decided : row)) }, today);
-  const nextInstance = withReviewFlag({ ...instance, checklist: instance.checklist.map((row) => (row.id === itemId ? nextItem : row)) });
-  const request = state.serviceRequests.find((row) => row.id === instance.requestId);
-  let next = replaceInstance(state, nextInstance, actor, decision === "Approved" ? "Approve document" : "Reject document", `${item.name} version ${file.version} (${file.fileName}) ${decision.toLowerCase()}.${reason ? ` Reason: ${reason}` : ""}`, item.status);
-  if (decision === "Rejected") next = notice(next, "Document rejected", `${item.name} was rejected on ${request?.number ?? instance.id}. ${reason}`, `/service-requests/${instance.requestId}`, instance.assigneeId);
-  return { state: next };
-}
-
-/** Marks approved documents past their expiry date as Expired, opens a replacement, and flags the service. */
-export function expireServiceDocuments(state: State): State {
-  const today = todayKey();
-  let changed = false;
-  let next = state;
-  const instances = state.serviceInstances.map((instance) => {
-    if (isTerminal(instance.status)) return instance;
-    let touched = false;
-    const checklist = instance.checklist.map((item) => {
-      if (!item.files?.some((file) => file.status === "Approved" && file.expiryDate && file.expiryDate < today)) return item;
-      const files = item.files.map((file) => (isExpiredFile(file, today) && file.status === "Approved" ? { ...file, status: "Expired" as const } : file));
-      const settled = settleItem({ ...item, files }, today);
-      touched = true;
-      const request = state.serviceRequests.find((row) => row.id === instance.requestId);
-      next = notice(
-        withAudit(next, "system", "Document expired", "Service Request", request?.number ?? instance.requestId, { detail: `${item.name} expired. A replacement is required.`, previous: item.status, next: settled.status }),
-        "Document expired",
-        `${item.name} has expired on ${request?.number ?? instance.requestId}. A replacement was requested.`,
-        `/service-requests/${instance.requestId}`,
-        instance.assigneeId,
-      );
-      return settled;
-    });
-    if (!touched) return instance;
-    changed = true;
-    return withReviewFlag({ ...instance, checklist });
-  });
-  return changed ? { ...next, serviceInstances: instances } : state;
-}
-
-export function sendPortalInvitation(state: State, input: { customerId: string; requestId?: string; message?: string }, actor: User): { state: State; error?: string } {
-  const customer = state.customers.find((item) => item.id === input.customerId);
-  if (!customer) return { state, error: "Customer not found." };
-  const contact = primaryContact(customer);
-  const email = contact?.email?.trim() ?? "";
-  if (!contact || !email) return { state, error: "The primary contact needs an email address before an invitation can be sent." };
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return { state, error: "The primary contact email is not valid." };
-  const request = input.requestId ? state.serviceRequests.find((item) => item.id === input.requestId) : undefined;
-  if (input.requestId && (!request || request.customerId !== customer.id)) return { state, error: "That request does not belong to this customer." };
-  if (request) {
-    const outstanding = state.serviceInstances
-      .filter((item) => item.requestId === request.id)
-      .flatMap((item) => item.checklist)
-      .some((item) => item.requirement === "Mandatory" && item.status !== "Approved");
-    if (!outstanding) return { state, error: "Every mandatory document is already approved. No invitation is needed." };
-  }
-  const expires = new Date();
-  expires.setDate(expires.getDate() + 14);
-  const message = input.message?.trim() || (request ? `Upload the outstanding documents for ${request.number}.` : "Open the document portal to see what is outstanding.");
-  const invitation: Invitation = {
-    id: uid("inv"),
-    applicationId: "",
-    requestId: request?.id,
-    customerId: customer.id,
-    contactId: contact.id,
-    email,
-    mobile: contact.mobile,
-    expiresAt: expires.toISOString(),
-    template: request ? "Service document checklist" : "Customer portal",
-    message,
-    status: "Sent",
-    sentAt: new Date().toISOString(),
-    sentBy: actor.id,
-  };
-  const obsolete = state.invitations.filter((item) => item.email.toLowerCase() === email.toLowerCase() && (item.status === "Sent" || item.status === "Opened") && item.requestId === request?.id && item.customerId === customer.id);
-  const label = request?.number ?? customer.code;
-  let next: State = {
-    ...state,
-    invitations: [invitation, ...state.invitations.map((item) => (obsolete.some((row) => row.id === item.id) ? { ...item, status: "Revoked" as const } : item))],
-  };
-  next = withAudit(next, actor.id, obsolete.length ? "Resend invitation" : "Invite", request ? "Service Request" : "Customer", label, {
-    detail: `Portal invitation sent to ${email}.${obsolete.length ? " Earlier links were revoked." : ""}`,
-  });
-  return { state: next };
-}
-
-export function sendServiceInvitation(state: State, requestId: string, actor: User): { state: State; error?: string } {
-  const request = state.serviceRequests.find((item) => item.id === requestId);
-  if (!request) return { state, error: "Service request not found." };
-  return sendPortalInvitation(state, { customerId: request.customerId, requestId }, actor);
 }

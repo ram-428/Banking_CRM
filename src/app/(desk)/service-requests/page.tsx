@@ -3,10 +3,9 @@
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useMemo, useState } from "react";
-import { FormDialog } from "@/components/form-dialog";
-import { Button, DataTable, Field, Gate, PageHeader, StatusText } from "@/components/ui";
+import { CreateServiceRequestDialog } from "@/components/create-service-request-dialog";
+import { Button, DataTable, Gate, PageHeader, StatusText } from "@/components/ui";
 import { can, userName } from "@/lib/access";
-import { createServiceRequest } from "@/lib/actions";
 import { parentRequestStatus, serviceCounts } from "@/lib/request-status";
 import { useDesk } from "@/lib/store";
 
@@ -17,12 +16,6 @@ export default function ServiceRequestsPage() {
   const presetCustomer = params.get("customer") ?? "";
   const [q, setQ] = useState("");
   const [open, setOpen] = useState(Boolean(presetCustomer));
-  const [customerId, setCustomerId] = useState(presetCustomer);
-  const [assigneeId, setAssigneeId] = useState("");
-  const [priority, setPriority] = useState<"Normal" | "High">("Normal");
-  const [remarks, setRemarks] = useState("");
-  const [selected, setSelected] = useState<string[]>([]);
-  const [error, setError] = useState("");
 
   const rows = useMemo(() => {
     if (!state) return [];
@@ -34,27 +27,6 @@ export default function ServiceRequestsPage() {
   }, [state, q]);
 
   if (!state || !user) return null;
-  const activeServices = state.services.filter((item) => item.status === "Active");
-  const staff = state.users.filter((item) => item.status === "Active");
-
-  function toggle(id: string) {
-    setSelected((current) => (current.includes(id) ? current.filter((item) => item !== id) : [...current, id]));
-  }
-
-  function save() {
-    const result = createServiceRequest(
-      state!,
-      { customerId, serviceIds: selected, assigneeId: assigneeId || user!.id, priority, remarks },
-      user!,
-    );
-    if (result.error || !result.id) {
-      setError(result.error ?? "The request could not be created.");
-      return;
-    }
-    replace(result.state);
-    setOpen(false);
-    router.push(`/service-requests/${result.id}`);
-  }
 
   return (
     <Gate module="Applications">
@@ -118,57 +90,18 @@ export default function ServiceRequestsPage() {
             )}
           </tbody>
         </DataTable>
-        <FormDialog
+        <CreateServiceRequestDialog
           open={open}
-          title="Create service request"
-          description="Customer details come from the customer record. Select one or more active services. The same service cannot be added twice."
-          submitLabel="Create request"
-          wide
+          state={state}
+          user={user}
+          customerId={presetCustomer}
           onClose={() => setOpen(false)}
-          onSubmit={save}
-        >
-          <div className="fields">
-            <Field label="Customer" required error={error}>
-              <select value={customerId} onChange={(event) => setCustomerId(event.target.value)}>
-                <option value="">Select a customer</option>
-                {state.customers.map((customer) => (
-                  <option key={customer.id} value={customer.id}>
-                    {customer.code} · {customer.name}
-                  </option>
-                ))}
-              </select>
-            </Field>
-            <Field label="Assigned employee" required>
-              <select value={assigneeId || user.id} onChange={(event) => setAssigneeId(event.target.value)}>
-                {staff.map((person) => (
-                  <option key={person.id} value={person.id}>
-                    {person.name}
-                  </option>
-                ))}
-              </select>
-            </Field>
-            <Field label="Priority" required>
-              <select value={priority} onChange={(event) => setPriority(event.target.value as "Normal" | "High")}>
-                <option>Normal</option>
-                <option>High</option>
-              </select>
-            </Field>
-            <Field label="Service requirements">
-              <textarea value={remarks} maxLength={1000} onChange={(event) => setRemarks(event.target.value)} placeholder="What the customer needs from the selected services" />
-            </Field>
-          </div>
-          <div className="fields" style={{ marginTop: 12 }}>
-            {activeServices.map((service) => (
-              <label key={service.id} className="field">
-                <span>
-                  <input type="checkbox" checked={selected.includes(service.id)} onChange={() => toggle(service.id)} /> {service.name}
-                </span>
-                <small className="hint">{service.financialAssessment ? "Financial assessment required" : "No financial assessment"}</small>
-              </label>
-            ))}
-            {activeServices.length === 0 && <p className="hint">Add an active service in Service master before creating a request.</p>}
-          </div>
-        </FormDialog>
+          onCreated={(next, id) => {
+            replace(next);
+            setOpen(false);
+            router.push(`/service-requests/${id}`);
+          }}
+        />
       </div>
     </Gate>
   );

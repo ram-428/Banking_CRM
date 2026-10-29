@@ -1238,8 +1238,8 @@ export function createSeed(): State {
     ],
     invitations: [
       { id: "inv-alnoor", applicationId: "app-alnoor", contactId: "ct-nora", email: "nora@alnoor.ae", mobile: "+971 50 882 1140", expiresAt: "2026-11-02T18:00:00.000Z", template: "Document request", message: "Please replace the passport scan and add August if the bank can issue it.", status: "Opened", sentAt: "2026-10-16T08:00:00.000Z", sentBy: "u-layla" },
-      { id: "inv-req-1", applicationId: "", requestId: "req-1", customerId: "cus-alnoor", contactId: "ct-nora", email: "nora@alnoor.ae", mobile: "+971 50 882 1140", expiresAt: "2026-11-10T18:00:00.000Z", template: "Service document checklist", message: "Upload the outstanding documents for REQ-0001.", status: "Opened", sentAt: "2026-10-21T08:30:00.000Z", sentBy: "u-layla" },
-      { id: "inv-marina",applicationId: "app-marina", contactId: "ct-hana", email: "hana@marinaglass.ae", mobile: "+971 56 118 3004", expiresAt: "2026-11-04T18:00:00.000Z", template: "Document request", status: "Sent", sentAt: "2026-10-21T10:05:00.000Z", sentBy: "u-layla" },
+      { id: "inv-marina", applicationId: "app-marina", contactId: "ct-hana", email: "hana@marinaglass.ae", mobile: "+971 56 118 3004", expiresAt: "2026-11-04T18:00:00.000Z", template: "Document request", status: "Sent", sentAt: "2026-10-21T10:05:00.000Z", sentBy: "u-layla" },
+      { id: "inv-lending", applicationId: "", requestId: "req-lending", contactId: "ct-nora", email: "nora@alnoor.ae", mobile: "+971 50 882 1140", expiresAt: "2026-11-11T18:00:00.000Z", template: "Service document checklist", message: "Upload the documents for REQ-0002.", status: "Sent", sentAt: "2026-10-28T08:20:00.000Z", sentBy: "u-layla" },
       { id: "inv-old", applicationId: "app-harbour", contactId: "ct-karim", email: "karim@harbourspice.ae", mobile: "+971 52 441 0091", expiresAt: "2026-10-01T18:00:00.000Z", template: "Document request", status: "Expired", sentAt: "2026-09-20T08:00:00.000Z", sentBy: "u-layla" },
     ],
     audit,
@@ -1254,6 +1254,13 @@ export function createSeed(): State {
     services: [
       { id: "svc-account", name: "Account services", status: "Active", financialAssessment: false, documentCodes: ["DOC-TL", "DOC-EID"] },
       { id: "svc-facility", name: "Facility services", status: "Active", financialAssessment: true, documentCodes: ["DOC-TL", "DOC-BS", "DOC-AFS"] },
+      {
+        id: "svc-lending",
+        name: "Lending Assist",
+        status: "Active",
+        financialAssessment: true,
+        documentCodes: documents.map((item) => item.code),
+      },
     ],
     serviceRequests: [
       {
@@ -1267,6 +1274,17 @@ export function createSeed(): State {
         createdAt: "2026-10-20T08:00:00.000Z",
         updatedAt: "2026-10-26T09:00:00.000Z",
       },
+      {
+        id: "req-lending",
+        number: "REQ-0002",
+        customerId: "cus-alnoor",
+        requestDate: "2026-10-28",
+        assigneeId: "u-layla",
+        priority: "Normal",
+        remarks: "Lending Assist with the full document checklist.",
+        createdAt: "2026-10-28T08:00:00.000Z",
+        updatedAt: "2026-10-28T08:00:00.000Z",
+      },
     ],
     serviceInstances: [
       {
@@ -1279,33 +1297,7 @@ export function createSeed(): State {
         assessmentRequired: false,
         assessmentStatus: "Not required",
         checklist: [
-          {
-            id: "si-1-tl",
-            documentCode: "DOC-TL",
-            name: "Trade License",
-            requirement: "Mandatory",
-            status: "Approved",
-            minFiles: 1,
-            fileName: "trade-licence-2026.pdf",
-            expiryDate: "2027-10-28",
-            files: [
-              {
-                id: "file-si-1-tl-1",
-                version: 1,
-                fileName: "trade-licence-2026.pdf",
-                size: 412000,
-                uploadedBy: "nora@alnoor.ae",
-                uploadedByType: "Customer",
-                uploadedAt: "2026-10-21T09:00:00.000Z",
-                reference: "TL-884201",
-                issueDate: "2026-10-29",
-                expiryDate: "2027-10-28",
-                status: "Approved",
-                verifiedBy: "u-layla",
-                verifiedAt: "2026-10-21T11:30:00.000Z",
-              },
-            ],
-          },
+          { id: "si-1-tl", documentCode: "DOC-TL", name: "Trade License", requirement: "Mandatory", status: "Approved" },
           { id: "si-1-eid", documentCode: "DOC-EID", name: "Emirates ID", requirement: "Mandatory", status: "Pending" },
         ],
       },
@@ -1329,6 +1321,23 @@ export function createSeed(): State {
           { id: "si-2-bs", documentCode: "DOC-BS", name: "Bank Statements", requirement: "Mandatory", status: "Approved" },
           { id: "si-2-afs", documentCode: "DOC-AFS", name: "Audited Financial Statements", requirement: "Mandatory", status: "Approved" },
         ],
+      },
+      {
+        id: "si-lending",
+        requestId: "req-lending",
+        serviceId: "svc-lending",
+        assigneeId: "u-layla",
+        status: "Documents Pending",
+        startedAt: "2026-10-28T08:10:00.000Z",
+        assessmentRequired: true,
+        assessmentStatus: "Pending",
+        checklist: documents.map((item) => ({
+          id: `si-lending-${item.code}`,
+          documentCode: item.code,
+          name: item.name,
+          requirement: "Mandatory" as const,
+          status: "Pending" as const,
+        })),
       },
     ],
     serviceActivities: [
@@ -1359,7 +1368,7 @@ export function createSeed(): State {
         status: "Pending Review",
       },
     ],
-    counters: { customer: 10502, application: 241, submission: 189, task: 5, followUp: 2, user: 33, document: 18, request: 1, serviceInstance: 2 },
+    counters: { customer: 10502, application: 241, submission: 189, task: 5, followUp: 2, user: 33, document: 18, request: 2, serviceInstance: 3 },
     sessionUserId: null,
     portalEmail: null,
   };
