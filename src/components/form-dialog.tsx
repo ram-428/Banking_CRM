@@ -9,6 +9,7 @@ export function FormDialog({
   title,
   description,
   submitLabel,
+  cancelLabel = "Cancel",
   wide,
   readOnly,
   onClose,
@@ -19,6 +20,7 @@ export function FormDialog({
   title: string;
   description?: string;
   submitLabel: string;
+  cancelLabel?: string;
   wide?: boolean;
   readOnly?: boolean;
   onClose: () => void;
@@ -76,7 +78,7 @@ export function FormDialog({
             ) : (
               <>
                 <Button type="button" variant="secondary" onClick={onClose}>
-                  Cancel
+                  {cancelLabel}
                 </Button>
                 <Button type="submit">{submitLabel}</Button>
               </>

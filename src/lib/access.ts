@@ -42,6 +42,7 @@ export function navFor(state: State) {
 
 export function userName(state: State, id?: string) {
   if (!id) return "Unassigned";
+  if (id.startsWith("portal:")) return `Customer (${id.slice("portal:".length)})`;
   return state.users.find((user) => user.id === id)?.name ?? "Unknown";
 }
 

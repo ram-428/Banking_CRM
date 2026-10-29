@@ -39,23 +39,7 @@ function NavIcon({ href }: { href: string }) {
       </svg>
     );
   }
-  if (href === "/service-requests") {
-    return (
-      <svg {...props}>
-        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-        <path d="M14 2v6h6M8 13h8M8 17h5" />
-      </svg>
-    );
-  }
-  if (href === "/service-master") {
-    return (
-      <svg {...props}>
-        <circle cx="12" cy="12" r="3" />
-        <path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2" />
-      </svg>
-    );
-  }
-  if (href === "/work-queue" || href === "/tasks") {
+  if (href === "/tasks") {
     return (
       <svg {...props}>
         <path d="M9 6h11M9 12h11M9 18h11" />
@@ -176,7 +160,7 @@ const CRUMB: Record<string, string> = {
   "service-requests": "Service request list",
   "service-master": "Service master",
   "work-queue": "My work queue",
-  customers: "Customer list",
+  customers: "Customer profiles",
   verification: "Verification queue",
   financials: "Financial profiles",
   statements: "Bank statement analysis",
@@ -211,8 +195,8 @@ function navCurrent(pathname: string, search: string, href: string) {
   const [path, query = ""] = href.split("?");
   if (path === "/documents") {
     if (pathname !== "/documents") return false;
-    const tab = new URLSearchParams(search).get("tab") ?? "documents";
-    const wanted = new URLSearchParams(query).get("tab") ?? "documents";
+    const tab = new URLSearchParams(search).get("tab") ?? "categories";
+    const wanted = new URLSearchParams(query).get("tab") ?? "categories";
     return tab === wanted;
   }
   if (pathname === path) return true;
@@ -232,14 +216,9 @@ export function Shell({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const [search, setSearch] = useState("");
   const [open, setOpen] = useState(false);
-  const [collapsed, setCollapsed] = useState(false);
-  const [closedGroups, setClosedGroups] = useState<Record<string, boolean>>({});
+  const [navMenu, setNavMenu] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [menu, setMenu] = useState<"search" | "bell" | "user" | null>(null);
-
-  useEffect(() => {
-    setCollapsed(localStorage.getItem("vrw.sidebar.collapsed") === "1");
-  }, []);
 
   useEffect(() => {
     const read = () => setSearch(window.location.search.replace(/^\?/, ""));
@@ -259,6 +238,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     setOpen(false);
     setMenu(null);
+    setNavMenu(null);
   }, [pathname]);
 
   const results = useMemo(() => {
@@ -268,14 +248,14 @@ export function Shell({ children }: { children: React.ReactNode }) {
       .filter((item) => `${item.name} ${item.code}`.toLowerCase().includes(q))
       .slice(0, 4)
       .map((item) => ({ href: `/customers/${item.code}`, label: item.name, meta: item.code }));
-    const apps = state.serviceRequests
+    const apps = state.applications
       .filter((item) => {
         const customer = state.customers.find((row) => row.id === item.customerId);
         return `${item.number} ${customer?.name ?? ""}`.toLowerCase().includes(q);
       })
       .slice(0, 4)
       .map((item) => ({
-        href: `/service-requests/${item.id}`,
+        href: `/applications/${item.id}`,
         label: item.number,
         meta: state.customers.find((row) => row.id === item.customerId)?.name ?? "",
       }));
@@ -285,6 +265,17 @@ export function Shell({ children }: { children: React.ReactNode }) {
   if (!ready || !state || !user) return <DeskSkeleton />;
 
   const groups = navFor(state);
+  const headerMenus = [
+    { label: "Dashboard", items: groups.flatMap((group) => group.items).filter((item) => item.href === "/dashboard") },
+    { label: "Customers", items: groups.find((group) => group.section === "Customer and Lead Management")?.items ?? [] },
+    { label: "Service Requests", items: groups.find((group) => group.section === "Service Requests")?.items ?? [] },
+    { label: "Configuration", items: groups.find((group) => group.section === "Document Master and Checklist Configuration")?.items ?? [] },
+    { label: "Administration", items: groups.find((group) => group.section === "Administration")?.items ?? [] },
+    {
+      label: "Customer Portal",
+      items: groups.flatMap((group) => group.items).filter((item) => item.href === "/customer").map((item) => ({ ...item, label: "Document portal" })),
+    },
+  ].filter((group) => group.items.length > 0);
   const visibleNotices = state.notices.filter((item) => !item.userId || item.userId === user.id);
   const unread = visibleNotices.filter((item) => !item.read);
   const crumbs = pathname.split("/").filter(Boolean).map((segment, index, all) => ({
@@ -294,87 +285,62 @@ export function Shell({ children }: { children: React.ReactNode }) {
   }));
 
   return (
-    <div className={collapsed ? "shell is-collapsed" : "shell"}>
+    <div className={open ? "shell nav-open" : "shell"}>
       <a className="skip" href="#content">
         Skip to content
       </a>
-      {open && <button className="backdrop" aria-label="Close menu" onClick={() => setOpen(false)} />}
-      <aside className={open ? "sidebar open" : "sidebar"}>
-        <div className="side-brand">
-          <Link href="/dashboard">
-            <span className="mark">V</span>
-            <span className="brand-name">VR Worldwide</span>
-          </Link>
-          <button
-            className="collapse-btn"
-            type="button"
-            aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-            aria-pressed={collapsed}
-            onClick={() => {
-              setCollapsed((value) => {
-                localStorage.setItem("vrw.sidebar.collapsed", value ? "0" : "1");
-                return !value;
-              });
-            }}
-          >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true">
-              {collapsed ? <path d="M9 6l6 6-6 6M4 6v12" /> : <path d="M15 6l-6 6 6 6M20 6v12" />}
-            </svg>
-          </button>
-        </div>
-        <nav className="side-nav" aria-label="Desk">
-          {groups.map((group) => {
-            const closed = closedGroups[group.section] === true;
-            return (
-              <div key={group.section || group.items[0]?.href} className={closed ? "nav-group is-closed" : "nav-group"}>
-                {group.section ? (
-                  <button
-                    className="nav-section"
-                    type="button"
-                    aria-expanded={!closed}
-                    onClick={() => setClosedGroups((current) => ({ ...current, [group.section]: !closed }))}
-                  >
-                    <span>{group.section}</span>
-                    <svg className="nav-caret" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
-                      <path d="M6 9l6 6 6-6" />
-                    </svg>
-                  </button>
-                ) : null}
-                <div className="nav-links">
-                  {group.items.map((item) => {
-                    const current = navCurrent(pathname, search, item.href);
-                    return (
-                      <Link key={item.href} href={item.href} className="nav-link" aria-current={current ? "page" : undefined} title={item.label}>
-                        <span className="nav-ico">
-                          <NavIcon href={item.href} />
-                        </span>
-                        <span className="nav-label">{item.label}</span>
-                      </Link>
-                    );
-                  })}
-                </div>
-              </div>
-            );
-          })}
-        </nav>
-      </aside>
       <div className="main">
         <header className="topbar">
-          <button className="icon-btn menu-btn" type="button" aria-label="Open navigation" onClick={() => setOpen(true)}>
+          <div className="topbar-row">
+          <button className="icon-btn menu-btn" type="button" aria-label="Open navigation" onClick={() => setOpen((value) => !value)}>
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true">
               <path d="M4 7h16M4 12h16M4 17h16" />
             </svg>
           </button>
-          <nav className="crumb-bar" aria-label="Breadcrumb">
-            <Link href="/dashboard">Home</Link>
-            {crumbs.map((crumb) => (
-              <span key={crumb.href} style={{ display: "contents" }}>
-                <span className="crumb-sep" aria-hidden="true">
-                  /
-                </span>
-                {crumb.last ? <span aria-current="page">{crumb.label}</span> : <Link href={crumb.href}>{crumb.label}</Link>}
-              </span>
-            ))}
+          <Link className="top-brand" href="/dashboard">
+            <span className="mark">V</span>
+            <span className="brand-name">VR Worldwide</span>
+          </Link>
+          <nav className="head-nav" aria-label="Desk">
+            {headerMenus.map((group) => {
+              const current = group.items.some((item) => navCurrent(pathname, search, item.href));
+              if (group.items.length === 1 && group.label === "Dashboard") {
+                const item = group.items[0];
+                return (
+                  <Link key={group.label} href={item.href} className="head-link" aria-current={current ? "page" : undefined}>
+                    {group.label}
+                  </Link>
+                );
+              }
+              const expanded = navMenu === group.label;
+              return (
+                <div key={group.label} className={current ? "head-drop is-current" : "head-drop"}>
+                  <button
+                    className="head-link"
+                    type="button"
+                    aria-expanded={expanded}
+                    onClick={() => setNavMenu(expanded ? null : group.label)}
+                  >
+                    {group.label}
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+                      <path d="M6 9l6 6 6-6" />
+                    </svg>
+                  </button>
+                  {expanded && (
+                    <div className="head-panel">
+                      {group.items.map((item) => {
+                        const active = navCurrent(pathname, search, item.href);
+                        return (
+                          <Link key={item.href} href={item.href} aria-current={active ? "page" : undefined}>
+                            {item.label}
+                          </Link>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </nav>
           <div className="search">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
@@ -382,8 +348,8 @@ export function Shell({ children }: { children: React.ReactNode }) {
               <path d="M20 20l-3.5-3.5" />
             </svg>
             <input
-              aria-label="Search customers and service requests"
-              placeholder="Search customer, code, or request number"
+              aria-label="Search companies and applications"
+              placeholder="Search company, code, or application"
               value={query}
               onChange={(event) => {
                 setQuery(event.target.value);
@@ -462,6 +428,18 @@ export function Shell({ children }: { children: React.ReactNode }) {
               )}
             </div>
           </div>
+          </div>
+          <nav className="crumb-bar" aria-label="Breadcrumb">
+            <Link href="/dashboard">Home</Link>
+            {crumbs.map((crumb) => (
+              <span key={crumb.href} style={{ display: "contents" }}>
+                <span className="crumb-sep" aria-hidden="true">
+                  /
+                </span>
+                {crumb.last ? <span aria-current="page">{crumb.label}</span> : <Link href={crumb.href}>{crumb.label}</Link>}
+              </span>
+            ))}
+          </nav>
         </header>
         <main id="content">{children}</main>
       </div>
