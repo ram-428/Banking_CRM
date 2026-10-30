@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { FormDialog } from "@/components/form-dialog";
-import { Button, Field } from "@/components/ui";
+import { Field } from "@/components/ui";
 import { createServiceRequest, sendServiceInvitation } from "@/lib/actions";
 import type { State, User } from "@/lib/types";
 
@@ -48,10 +48,6 @@ export function CreateServiceRequestDialog({
   const customer = state.customers.find((item) => item.id === customerId);
   const hasPortalContact = Boolean(customer?.contacts.some((item) => item.email));
 
-  function toggle(id: string) {
-    setSelected((current) => (current.includes(id) ? current.filter((item) => item !== id) : [...current, id]));
-  }
-
   function save() {
     const result = createServiceRequest(state, { customerId, serviceIds: selected, assigneeId: assigneeId || user.id, priority, remarks }, user);
     if (result.error || !result.id) {
@@ -70,7 +66,7 @@ export function CreateServiceRequestDialog({
     <FormDialog
       open={open}
       title="Create service request"
-      description="Customer details come from the customer record. Select one or more active services. The same service cannot be added twice."
+      description="Customer details come from the customer record. Select one active service. Create a separate request for each additional service."
       submitLabel="Create request"
       wide
       onClose={onClose}
@@ -103,30 +99,18 @@ export function CreateServiceRequestDialog({
           </select>
         </Field>
         <Field label="Service requirements">
-          <textarea value={remarks} maxLength={1000} onChange={(event) => setRemarks(event.target.value)} placeholder="What the customer needs from the selected services" />
+          <textarea value={remarks} maxLength={1000} onChange={(event) => setRemarks(event.target.value)} placeholder="What the customer needs from the selected service" />
         </Field>
       </div>
-      <div className="check-toolbar">
-        <div className="check-toolbar-title">
-          <strong>Services</strong>
-          <span className="hint">
-            {selected.length} of {activeServices.length} selected
-          </span>
-        </div>
-        <div className="row-actions">
-          <Button type="button" variant="secondary" disabled={selected.length === activeServices.length} onClick={() => setSelected(activeServices.map((item) => item.id))}>
-            Select all
-          </Button>
-          <Button type="button" variant="secondary" disabled={selected.length === 0} onClick={() => setSelected([])}>
-            Deselect all
-          </Button>
-        </div>
+      <div className="check-toolbar-title">
+        <strong>Service</strong>
+        <span className="hint">Choose one service per request.</span>
       </div>
       <div className="fields" style={{ marginTop: 8 }}>
         {activeServices.map((service) => (
           <label key={service.id} className="field">
             <span>
-              <input type="checkbox" checked={selected.includes(service.id)} onChange={() => toggle(service.id)} /> {service.name}
+              <input type="radio" name="service" checked={selected.includes(service.id)} onChange={() => setSelected([service.id])} /> {service.name}
             </span>
             <small className="hint">
               {service.documentCodes.length} documents · {service.financialAssessment ? "financial assessment required" : "no financial assessment"}

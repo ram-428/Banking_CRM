@@ -4,7 +4,8 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { CreateServiceRequestDialog } from "@/components/create-service-request-dialog";
-import { Button, ButtonLink, Field, PageHeader, StatusText, Tabs, DataTable } from "@/components/ui";
+import { FormDialog } from "@/components/form-dialog";
+import { Button, ButtonLink, Field, PageHeader, RowAction, StatusText, DataTable } from "@/components/ui";
 import { can, userName } from "@/lib/access";
 import { updateCustomer, validateCustomerRecords } from "@/lib/actions";
 import { BANKS, EMIRATES, LEAD_STATUSES, LEGAL_TYPES, LOBS } from "@/lib/constants";
@@ -18,7 +19,7 @@ export default function CustomerPage() {
   const params = useParams<{ code: string }>();
   const { state, replace, user } = useDesk();
   const customer = state?.customers.find((item) => item.code === params.code);
-  const [tab, setTab] = useState("Company Details");
+  const [tab, setTab] = useState<string | null>(null);
   const [draft, setDraft] = useState<Customer | null>(null);
   const [saved, setSaved] = useState(false);
   const [formError, setFormError] = useState("");
@@ -40,93 +41,33 @@ export default function CustomerPage() {
     setSaved(false);
   }
 
-  function save(detail: string) {
-    if (!draft) return;
+  function save(detail: string): boolean {
+    if (!draft) return false;
     const problem = validateCustomerRecords(draft);
     if (problem) {
       setFormError(problem);
       setSaved(false);
-      return;
+      return false;
     }
     setFormError("");
     replace(updateCustomer(state!, draft.id, draft, user!, detail));
     setSaved(true);
+    return true;
   }
 
-  return (
-    <div className="page">
-      <PageHeader
-        crumbs={[{ href: "/customers", label: "Customer profiles" }, { label: customer.code }]}
-        title={draft.name}
-        lede={`${customer.code} · ${draft.folderRef} · last change ${formatWhen(customer.updatedAt)} by ${userName(state, customer.updatedBy)}`}
-        actions={
-          <>
-            {can(state, "Applications", "create") && (
-              <Button type="button" onClick={() => setRequestOpen(true)}>
-                Create service request
-              </Button>
-            )}
-            <ButtonLink href={`/applications/new?customer=${customer.id}`}>Create application</ButtonLink>
-          </>
-        }
-      />
-      <div className="fields" style={{ marginBottom: 18, alignItems: "end" }}>
-        <Field label="Lead status">
-          <select value={draft.leadStatus} onChange={(event) => patch({ leadStatus: event.target.value as Customer["leadStatus"] })}>
-            {LEAD_STATUSES.map((item) => (
-              <option key={item}>{item}</option>
-            ))}
-          </select>
-        </Field>
-        <Field label="Profile">
-          <div style={{ height: 36, display: "flex", alignItems: "center" }}>
-            <StatusText value={draft.profileStatus} />
-          </div>
-        </Field>
-        <div>
-          <Button onClick={() => save("Company profile saved.")} disabled={!canEdit}>
-            Save profile
-          </Button>
-          {formError && <p className="err">{formError}</p>}
-          {saved && <span className="hint"> Saved.</span>}
-        </div>
-      </div>
-      {apps.length > 0 && (
-        <p className="hint" style={{ marginBottom: 12 }}>
-          Applications:{" "}
-          {apps.map((app) => (
-            <Link key={app.id} href={`/applications/${app.id}`} style={{ marginRight: 10 }}>
-              {app.number}
-            </Link>
-          ))}
-        </p>
-      )}
-      {requests.length > 0 && (
-        <p className="hint" style={{ marginBottom: 12 }}>
-          Service requests:{" "}
-          {requests.map((request) => (
-            <Link key={request.id} href={`/service-requests/${request.id}`} style={{ marginRight: 10 }}>
-              {request.number}
-            </Link>
-          ))}
-        </p>
-      )}
-      <CreateServiceRequestDialog
-        open={requestOpen}
-        state={state}
-        user={user}
-        customerId={customer.id}
-        lockCustomer
-        onClose={() => setRequestOpen(false)}
-        onCreated={(next, id) => {
-          replace(next);
-          setRequestOpen(false);
-          router.push(`/service-requests/${id}`);
-        }}
-      />
-      <Tabs tabs={TABS} value={tab} onChange={setTab} />
-      <fieldset disabled={!canEdit} style={{ border: 0, margin: 0, padding: 0 }}>
-      {tab === "Company Details" && (
+  function cancelEdit() {
+    setDraft(structuredClone(customer!));
+    setFormError("");
+    setTab(null);
+  }
+
+  function submitEdit() {
+    if (save(`${tab} saved.`)) setTab(null);
+  }
+
+  const tabBody = (name: string) => (
+    <>
+      {name === "Company Details" && (
         <div className="fields">
           <Field label="Company code" hint="Generated with the private folder. Read-only.">
             <input value={customer.code} readOnly />
@@ -214,7 +155,7 @@ export default function CustomerPage() {
           </Field>
         </div>
       )}
-      {tab === "Contacts" && (
+      {name === "Contacts" && (
         <div>
           {draft.contacts.map((contact, index) => (
             <div key={contact.id} className="fields" style={{ marginBottom: 16 }}>
@@ -306,7 +247,7 @@ export default function CustomerPage() {
           </Button>
         </div>
       )}
-      {tab === "Shareholders" && (
+      {name === "Shareholders" && (
         <div>
           <DataTable>
             <thead>
@@ -349,7 +290,7 @@ export default function CustomerPage() {
           </Button>
         </div>
       )}
-      {tab === "Compliance" && (
+      {name === "Compliance" && (
         <div className="fields">
           <Field label="MOA available" required>
             <select value={draft.moa} onChange={(event) => patch({ moa: event.target.value as "Yes" | "No" })}>
@@ -386,7 +327,7 @@ export default function CustomerPage() {
           </Field>
         </div>
       )}
-      {tab === "Banking Relationships" && (
+      {name === "Banking Relationships" && (
         <div>
           <DataTable>
             <thead>
@@ -470,7 +411,7 @@ export default function CustomerPage() {
           </Field>
         </div>
       )}
-      {tab === "Financial Information" && (
+      {name === "Financial Information" && (
         <div className="fields">
           <Field label="Sales turnover, last 12 months (AED)" required>
             <input value={draft.salesTurnover ?? ""} onChange={(event) => patch({ salesTurnover: Number(event.target.value), salesPeriod: draft.salesPeriod || "Last 12 months" })} />
@@ -698,7 +639,7 @@ export default function CustomerPage() {
           </div>
         </div>
       )}
-      {tab === "Existing Loans / Exposure" && (
+      {name === "Existing Loans / Exposure" && (
         <div>
           <DataTable>
             <thead>
@@ -762,7 +703,7 @@ export default function CustomerPage() {
           </Button>
         </div>
       )}
-      {tab === "Cheque Bounce Details" && (
+      {name === "Cheque Bounce Details" && (
         <div>
           <div className="fields">
             <Field label="Cheque bounce recorded">
@@ -847,7 +788,7 @@ export default function CustomerPage() {
           )}
         </div>
       )}
-      {tab === "Activity History" && (
+      {name === "Activity History" && (
         <DataTable>
           <thead>
             <tr>
@@ -878,7 +819,101 @@ export default function CustomerPage() {
           </tbody>
         </DataTable>
       )}
-      </fieldset>
+    </>
+  );
+
+  return (
+    <div className="page">
+      <PageHeader
+        crumbs={[{ href: "/customers", label: "Customer profiles" }, { label: customer.code }]}
+        title={draft.name}
+        lede={`${customer.code} · ${draft.folderRef} · last change ${formatWhen(customer.updatedAt)} by ${userName(state, customer.updatedBy)}`}
+        actions={
+          <>
+            {can(state, "Applications", "create") && (
+              <Button type="button" onClick={() => setRequestOpen(true)}>
+                Create service request
+              </Button>
+            )}
+            <ButtonLink href={`/applications/new?customer=${customer.id}`}>Create application</ButtonLink>
+          </>
+        }
+      />
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 16, marginBottom: 18, alignItems: "end" }}>
+        <Field label="Lead status" className="lead-status-field">
+          <select value={draft.leadStatus} onChange={(event) => patch({ leadStatus: event.target.value as Customer["leadStatus"] })}>
+            {LEAD_STATUSES.map((item) => (
+              <option key={item}>{item}</option>
+            ))}
+          </select>
+        </Field>
+        <Field label="Profile">
+          <div style={{ height: 36, display: "flex", alignItems: "center" }}>
+            <StatusText value={draft.profileStatus} />
+          </div>
+        </Field>
+        <div>
+          <Button onClick={() => save("Company profile saved.")} disabled={!canEdit}>
+            Save profile
+          </Button>
+          {formError && <p className="err">{formError}</p>}
+          {saved && <span className="hint"> Saved.</span>}
+        </div>
+      </div>
+      {apps.length > 0 && (
+        <p className="hint" style={{ marginBottom: 12 }}>
+          Applications:{" "}
+          {apps.map((app) => (
+            <Link key={app.id} href={`/applications/${app.id}`} style={{ marginRight: 10 }}>
+              {app.number}
+            </Link>
+          ))}
+        </p>
+      )}
+      {requests.length > 0 && (
+        <p className="hint" style={{ marginBottom: 12 }}>
+          Service requests:{" "}
+          {requests.map((request) => (
+            <Link key={request.id} href={`/service-requests/${request.id}`} style={{ marginRight: 10 }}>
+              {request.number}
+            </Link>
+          ))}
+        </p>
+      )}
+      <CreateServiceRequestDialog
+        open={requestOpen}
+        state={state}
+        user={user}
+        customerId={customer.id}
+        lockCustomer
+        onClose={() => setRequestOpen(false)}
+        onCreated={(next, id) => {
+          replace(next);
+          setRequestOpen(false);
+          router.push(`/service-requests/${id}`);
+        }}
+      />
+      <div className="card-grid">
+      {TABS.map((name) => (
+        <section key={name} className="panel">
+          <div className="panel-head">
+            <div>
+              <h2>{name}</h2>
+            </div>
+            {name !== "Activity History" && canEdit && <RowAction icon="edit" label={`Edit ${name}`} onClick={() => setTab(name)} />}
+          </div>
+          <fieldset disabled className="card-readonly" style={{ border: 0, margin: 0, padding: 0 }}>
+            {tabBody(name)}
+          </fieldset>
+        </section>
+      ))}
+      </div>
+      <FormDialog open={tab !== null} title={`Edit ${tab ?? ""}`} submitLabel="Save" wide onClose={cancelEdit} onSubmit={submitEdit}>
+        {formError && <p className="err">{formError}</p>}
+        <fieldset disabled={!canEdit} style={{ border: 0, margin: 0, padding: 0 }}>
+          {tab && tabBody(tab)}
+        </fieldset>
+      </FormDialog>
     </div>
   );
 }

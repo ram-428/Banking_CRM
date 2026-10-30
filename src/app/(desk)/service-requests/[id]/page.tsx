@@ -108,16 +108,72 @@ export default function ServiceRequestWorkspacePage() {
           lede={`${customer?.name ?? "Unknown customer"} · ${customer?.code ?? ""} · assigned to ${userName(state, request.assigneeId)} · ${request.priority}`}
           actions={<StatusText value={parentRequestStatus(instances)} />}
         />
-        {customer && (
-          <p className="hint">
-            Company and contact details stay on the customer record.{" "}
-            <Link className="link" href={`/customers/${customer.code}`}>
-              Open {customer.name}
-            </Link>
-          </p>
-        )}
         {error && <p className="err">{error}</p>}
         <div className="svc-pair">
+          <div style={{ display: "grid", gap: 14 }}>
+            {customer && (
+              <section className="panel">
+                <div className="panel-head">
+                  <div>
+                    <h2>Customer details</h2>
+                    <p className="hint">
+                      {customer.code} · {customer.relationship}
+                    </p>
+                  </div>
+                  <RowAction icon="edit" label="Edit customer details" href={`/customers/${customer.code}`} />
+                </div>
+                <dl className="fields">
+                  <div className="field"><span>Company</span><strong>{customer.name}</strong></div>
+                  <div className="field"><span>Legal type</span><strong>{customer.legalType}</strong></div>
+                  <div className="field"><span>Trade license</span><strong>{customer.tradeLicense}</strong></div>
+                  <div className="field"><span>Line of business</span><strong>{customer.lob}</strong></div>
+                  <div className="field"><span>Location</span><strong>{customer.emirate}, {customer.country}</strong></div>
+                  <div className="field"><span>Address</span><strong>{customer.address}</strong></div>
+                  {customer.contacts[0] && (
+                    <div className="field">
+                      <span>Primary contact</span>
+                      <strong>{customer.contacts[0].name}</strong>
+                      <small className="hint">{[customer.contacts[0].mobile, customer.contacts[0].email].filter(Boolean).join(" · ")}</small>
+                    </div>
+                  )}
+                </dl>
+                <p className="hint">
+                  <Link className="link" href={`/customers/${customer.code}`}>
+                    Open customer record
+                  </Link>
+                </p>
+              </section>
+            )}
+            <section className="panel">
+              <h2>Request history</h2>
+              {history.length === 0 ? (
+                <p className="hint">No service events have been recorded for this request yet.</p>
+              ) : (
+                <DataTable>
+                  <thead>
+                    <tr>
+                      <th>When</th>
+                      <th>Event</th>
+                      <th>By</th>
+                      <th>Change</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {history.map((event) => (
+                      <tr key={event.id}>
+                        <td>{event.at}</td>
+                        <td>{event.action}</td>
+                        <td>{userName(state, event.actorId)}</td>
+                        <td>
+                          {event.previous ? `${event.previous} → ${event.next ?? ""}` : event.detail}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </DataTable>
+              )}
+            </section>
+          </div>
           {[...instances].sort((a, b) => {
             const nameOf = (serviceId: string) => state.services.find((item) => item.id === serviceId)?.name ?? "";
             const rank = (name: string) => (name === "Account services" ? 0 : name === "Facility services" ? 1 : 2);
@@ -137,9 +193,7 @@ export default function ServiceRequestWorkspacePage() {
                       <StatusText value={instance.status} />
                     </p>
                   </div>
-                  {!locked && can(state, "Applications", "edit") && (
-                    <RowAction icon="edit" label={`Edit ${service?.name ?? "service"}`} onClick={() => openEditor(instance.id)} />
-                  )}
+                  <RowAction icon="edit" label={`Edit ${service?.name ?? "service"}`} onClick={() => openEditor(instance.id)} />
                 </div>
                 <DataTable>
                   <thead>
@@ -180,7 +234,6 @@ export default function ServiceRequestWorkspacePage() {
                   title={`Edit ${service?.name ?? "service"}`}
                   submitLabel="Submit"
                   cancelLabel="Close"
-                  wide
                   onClose={closeEditor}
                   onSubmit={() => submitEditor(instance.id)}
                 >
@@ -250,7 +303,7 @@ export default function ServiceRequestWorkspacePage() {
                     onChange={replace}
                     onError={setError}
                   />
-                  <div className="fields">
+                  <div style={{ display: "grid", gap: 12 }}>
                     <Field label="Reason or remarks">
                       <input value={reasons[instance.id] ?? ""} onChange={(event) => setReasons((current) => ({ ...current, [instance.id]: event.target.value }))} placeholder="Required for hold, completion, rejection, and cancellation" />
                     </Field>
@@ -299,35 +352,6 @@ export default function ServiceRequestWorkspacePage() {
             );
           })}
         </div>
-        <section className="panel">
-          <h2>Request history</h2>
-          {history.length === 0 ? (
-            <p className="hint">No service events have been recorded for this request yet.</p>
-          ) : (
-            <DataTable>
-              <thead>
-                <tr>
-                  <th>When</th>
-                  <th>Event</th>
-                  <th>By</th>
-                  <th>Change</th>
-                </tr>
-              </thead>
-              <tbody>
-                {history.map((event) => (
-                  <tr key={event.id}>
-                    <td>{event.at}</td>
-                    <td>{event.action}</td>
-                    <td>{userName(state, event.actorId)}</td>
-                    <td>
-                      {event.previous ? `${event.previous} → ${event.next ?? ""}` : event.detail}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </DataTable>
-          )}
-        </section>
       </div>
     </Gate>
   );

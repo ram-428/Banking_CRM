@@ -34,9 +34,35 @@ function withLendingSample(state: State, seed: State): State {
   };
 }
 
+function withOneServicePerRequest(state: State): State {
+  let next = state;
+  let n = state.counters?.request ?? 0;
+  for (const request of state.serviceRequests) {
+    const instances = next.serviceInstances.filter((item) => item.requestId === request.id);
+    for (const instance of instances.slice(1)) {
+      n += 1;
+      const id = `req-${n}`;
+      const number = `REQ-${String(n).padStart(4, "0")}`;
+      next = {
+        ...next,
+        serviceRequests: [{ ...request, id, number, previousRequestId: undefined }, ...next.serviceRequests],
+        serviceInstances: next.serviceInstances.map((item) => (item.id === instance.id ? { ...item, requestId: id } : item)),
+        serviceActivities: next.serviceActivities.map((item) => (item.instanceId === instance.id ? { ...item, requestId: id } : item)),
+        invitations: [
+          ...next.invitations,
+          ...next.invitations
+            .filter((item) => item.requestId === request.id)
+            .map((item) => ({ ...item, id: `${item.id}-${id}`, requestId: id, message: `Upload the documents for ${number}.` })),
+        ],
+      };
+    }
+  }
+  return n === (state.counters?.request ?? 0) ? state : { ...next, counters: { ...next.counters, request: n } };
+}
+
 function withServiceModel(state: State): State {
   const seed = createSeed();
-  return withLendingSample(withServiceModelBase(state, seed), seed);
+  return withOneServicePerRequest(withLendingSample(withServiceModelBase(state, seed), seed));
 }
 
 function withServiceModelBase(state: State, seed: State): State {
