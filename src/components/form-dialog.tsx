@@ -11,6 +11,7 @@ export function FormDialog({
   submitLabel,
   cancelLabel = "Cancel",
   wide,
+  size,
   readOnly,
   onClose,
   onSubmit,
@@ -22,6 +23,7 @@ export function FormDialog({
   submitLabel: string;
   cancelLabel?: string;
   wide?: boolean;
+  size?: "small";
   readOnly?: boolean;
   onClose: () => void;
   onSubmit: () => void;
@@ -53,7 +55,7 @@ export function FormDialog({
   return createPortal(
     <div className="modal-root">
       <div className="modal-backdrop" />
-      <div className={wide ? "modal modal-wide" : "modal"} role="dialog" aria-modal="true" aria-labelledby={titleId}>
+      <div className={`modal${wide ? " modal-wide" : ""}${size === "small" ? " modal-small" : ""}`} role="dialog" aria-modal="true" aria-labelledby={titleId}>
         <header className="modal-head">
           <h2 id={titleId}>{title}</h2>
           {description ? <p>{description}</p> : null}
