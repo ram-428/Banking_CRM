@@ -733,6 +733,7 @@ export type State = {
   documents: DocumentMaster[];
   rules: ChecklistRule[];
   services: ServiceDefinition[];
+  banks?: string[];
   serviceRequests: ServiceRequestRecord[];
   serviceInstances: ServiceInstance[];
   serviceActivities: ServiceActivity[];

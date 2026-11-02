@@ -6,7 +6,7 @@ import { useEffect, useMemo, useState } from "react";
 import { CreateApplicationDialog } from "@/components/create-application-dialog";
 import { Button, PageHeader, StatusText, DataTable } from "@/components/ui";
 import { can, userName } from "@/lib/access";
-import { APP_STATUSES, BANKS, LOAN_TYPES } from "@/lib/constants";
+import { APP_STATUSES, bankList, LOAN_TYPES } from "@/lib/constants";
 import { aed, formatDate, formatWhen } from "@/lib/format";
 import { deliveredTotal, latestDeliveryDate } from "@/lib/metrics";
 import { useDesk } from "@/lib/store";
@@ -73,7 +73,7 @@ export default function ApplicationsPage() {
         </select>
         <select aria-label="Bank" value={bank} onChange={(event) => setBank(event.target.value)}>
           <option>All</option>
-          {BANKS.filter((item) => item !== "Other").map((item) => (
+          {bankList(state).filter((item) => item !== "Other").map((item) => (
             <option key={item}>{item}</option>
           ))}
         </select>

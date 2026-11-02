@@ -15,7 +15,7 @@ export default function ServiceRequestsPage() {
   const params = useSearchParams();
   const presetCustomer = params.get("customer") ?? "";
   const [q, setQ] = useState("");
-  const [open, setOpen] = useState(Boolean(presetCustomer));
+  const [open, setOpen] = useState(Boolean(presetCustomer) || params.get("create") === "1");
 
   const rows = useMemo(() => {
     if (!state) return [];

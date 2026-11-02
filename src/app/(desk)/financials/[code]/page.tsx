@@ -5,7 +5,7 @@ import { useState } from "react";
 import { Button, Field, Gate, PageHeader, StatusText, Tabs, DataTable } from "@/components/ui";
 import { userName } from "@/lib/access";
 import { finalizeStatements, updateCustomer } from "@/lib/actions";
-import { BANKS } from "@/lib/constants";
+import { bankList } from "@/lib/constants";
 import { aed, formatWhen, uid } from "@/lib/format";
 import { profileSections } from "@/lib/metrics";
 import { useDesk } from "@/lib/store";
@@ -103,7 +103,7 @@ export default function FinancialProfilePage() {
             <div className="fields" style={{ marginTop: 12 }}>
               <Field label="Bank">
                 <select value={bank} onChange={(event) => setBank(event.target.value)}>
-                  {BANKS.filter((item) => item !== "Other").map((item) => (
+                  {bankList(state).filter((item) => item !== "Other").map((item) => (
                     <option key={item}>{item}</option>
                   ))}
                 </select>

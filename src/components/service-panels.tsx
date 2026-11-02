@@ -5,7 +5,7 @@ import { FormDialog } from "@/components/form-dialog";
 import { Button, DataTable, Field, RowAction } from "@/components/ui";
 import { userName } from "@/lib/access";
 import { progressServiceActivity, saveLoanDelivery, saveServiceActivity, transitionService } from "@/lib/actions";
-import { BANKS, LOAN_TYPES } from "@/lib/constants";
+import { bankList, LOAN_TYPES } from "@/lib/constants";
 import { aed } from "@/lib/format";
 import type { AssessmentResult, ServiceActivity, ServiceInstance, State, User } from "@/lib/types";
 
@@ -267,7 +267,7 @@ export function ServicePanels({
       <div className="fields">
         <Field label="Bank delivered" required>
           <select value={bank} disabled={locked} onChange={(event) => setBank(event.target.value)}>
-            {BANKS.map((item) => <option key={item}>{item}</option>)}
+            {bankList(state).map((item) => <option key={item}>{item}</option>)}
           </select>
         </Field>
         {bank === "Other" && (
