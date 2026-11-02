@@ -5,7 +5,7 @@ import { useState } from "react";
 import { ApplicationFrame, useRecord } from "@/components/application-frame";
 import { Button, Field, Gate, StatusText } from "@/components/ui";
 import { addSubmission, updateSubmission } from "@/lib/actions";
-import { BANKS, LOAN_TYPES, SUBMISSION_STATUSES } from "@/lib/constants";
+import { bankList, LOAN_TYPES, SUBMISSION_STATUSES } from "@/lib/constants";
 import { aed, formatDate } from "@/lib/format";
 import { submissionBlockers } from "@/lib/metrics";
 import { useDesk } from "@/lib/store";
@@ -134,7 +134,7 @@ export default function BanksPage() {
         <div className="fields">
           <Field label="Bank" required>
             <select value={bank} onChange={(event) => setBank(event.target.value)}>
-              {BANKS.map((item) => (
+              {bankList(state).map((item) => (
                 <option key={item}>{item}</option>
               ))}
             </select>

@@ -25,6 +25,13 @@ export const BANKS = [
   "Other",
 ];
 
+/** Built-in banks plus any added in the bank master. "Other" stays last. */
+export function bankList(state: { banks?: string[] } | null | undefined): string[] {
+  const base = BANKS.filter((item) => item !== "Other");
+  const extra = (state?.banks ?? []).filter((item) => !base.includes(item));
+  return [...base, ...extra, "Other"];
+}
+
 export const LOAN_TYPES = [
   "Business Loan",
   "Working Capital Loan",
@@ -159,18 +166,63 @@ export const STAGE_HREF: Record<Stage, (appId: string, customerCode?: string) =>
 
 export const NAV: { section: string; items: { href: string; label: string; module: ModuleKey }[] }[] = [
   {
-    section: "",
-    items: [{ href: "/dashboard", label: "Dashboard", module: "Applications" }],
+    section: "Dashboard",
+    items: [
+      { href: "/dashboard", label: "Overview", module: "Applications" },
+      { href: "/tasks", label: "My tasks", module: "Tasks" },
+      { href: "/workflow", label: "Pending actions", module: "Applications" },
+    ],
   },
   {
-    section: "Customer and Lead Management",
+    section: "Lead & Customer",
+    items: [
+      { href: "/leads", label: "Lead list", module: "Leads" },
+      { href: "/customers", label: "Customer list", module: "Leads" },
+    ],
+  },
+  {
+    section: "Service Requests",
+    items: [
+      { href: "/service-requests", label: "Request list", module: "Applications" },
+      { href: "/service-requests?create=1", label: "Create request", module: "Applications" },
+    ],
+  },
+  {
+    section: "Tasks & Activities",
+    items: [
+      { href: "/tasks", label: "My tasks", module: "Tasks" },
+      { href: "/task-assignment", label: "Team tasks", module: "Tasks" },
+      { href: "/follow-ups", label: "Follow-ups", module: "Leads" },
+      { href: "/work-queue", label: "My activities", module: "Tasks" },
+    ],
+  },
+  {
+    section: "Reports",
+    items: [
+      { href: "/reports?type=leads", label: "Lead reports", module: "Applications" },
+      { href: "/reports?type=services", label: "Service reports", module: "Applications" },
+      { href: "/reports?type=documents", label: "Document reports", module: "Applications" },
+      { href: "/reports?type=performance", label: "Performance reports", module: "Applications" },
+    ],
+  },
+  {
+    section: "Masters & Configuration",
+    items: [
+      { href: "/service-master", label: "Service master", module: "Documents" },
+      { href: "/documents?tab=documents", label: "Document master", module: "Documents" },
+      { href: "/documents?tab=rules", label: "Checklist mapping", module: "Documents" },
+      { href: "/bank-master", label: "Bank master", module: "Banks" },
+    ],
+  },
+  {
+    section: "Legacy customers and leads",
     items: [
       { href: "/leads", label: "Lead list", module: "Leads" },
       { href: "/customers", label: "Customer profiles", module: "Leads" },
     ],
   },
   {
-    section: "Service Requests",
+    section: "Legacy service requests",
     items: [
       { href: "/service-requests", label: "Service request list", module: "Applications" },
       { href: "/work-queue", label: "My work queue", module: "Tasks" },

@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { FormDialog } from "@/components/form-dialog";
 import { Button, Field } from "@/components/ui";
 import { createApplication } from "@/lib/actions";
-import { BANKS, LEAD_SOURCES, LOAN_TYPES } from "@/lib/constants";
+import { bankList, LEAD_SOURCES, LOAN_TYPES } from "@/lib/constants";
 import { useDesk } from "@/lib/store";
 
 export function CreateApplicationDialog({
@@ -216,7 +216,7 @@ export function CreateApplicationDialog({
           </Field>
           <Field label="Preferred banks" className="span-2">
             <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-              {BANKS.map((bank) => (
+              {bankList(state).map((bank) => (
                 <label key={bank} style={{ display: "flex", gap: 6, alignItems: "center" }}>
                   <input type="checkbox" checked={banks.includes(bank)} onChange={() => toggleBank(bank)} />
                   {bank}

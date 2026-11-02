@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { FormDialog } from "@/components/form-dialog";
 import { Button, ButtonLink, Field } from "@/components/ui";
 import { createLead, updateCustomer, type LeadInput } from "@/lib/actions";
-import { BANKS, COUNTRIES, EMIRATES, LEAD_SOURCES, LEAD_STATUSES, LEGAL_TYPES, LOAN_TYPES, LOBS, NATIONALITIES } from "@/lib/constants";
+import { bankList, COUNTRIES, EMIRATES, LEAD_SOURCES, LEAD_STATUSES, LEGAL_TYPES, LOAN_TYPES, LOBS, NATIONALITIES } from "@/lib/constants";
 import { possibleDuplicates } from "@/lib/duplicates";
 import { uid } from "@/lib/format";
 import { useDesk } from "@/lib/store";
@@ -90,7 +90,7 @@ export function CreateLeadDialog({
       return;
     }
     if (!customer) return;
-    const knownBank = BANKS.includes(customer.preferredBank ?? "");
+    const knownBank = bankList(state).includes(customer.preferredBank ?? "");
     setForm({
       ...empty,
       name: customer.name,
@@ -428,43 +428,8 @@ export function CreateLeadDialog({
         )}
       </section>
       <section className="form-section">
-        <h2>Initial lending requirement</h2>
+        <h2>Lead details</h2>
         <div className="fields">
-          <Field label="Required service" required>
-            <select value={form.service} onChange={(event) => set("service", event.target.value)}>
-              <option>Lending Assistance</option>
-            </select>
-          </Field>
-          <Field label="Loan type">
-            <select value={form.loanType} onChange={(event) => set("loanType", event.target.value)}>
-              <option value="">Decide later</option>
-              {LOAN_TYPES.map((item) => (
-                <option key={item}>{item}</option>
-              ))}
-            </select>
-          </Field>
-          <Field label="Requested amount (AED)">
-            <input placeholder="Enter the amount" value={form.requestedAmount} onChange={(event) => set("requestedAmount", event.target.value)} inputMode="numeric" />
-          </Field>
-          <Field label="Preferred bank" error={errors.preferredBank}>
-            <select value={form.preferredBank} onChange={(event) => set("preferredBank", event.target.value)}>
-              <option value="">None yet</option>
-              {BANKS.map((item) => (
-                <option key={item}>{item}</option>
-              ))}
-            </select>
-          </Field>
-          {form.preferredBank === "Other" && (
-            <Field label="Bank name" required error={errors.preferredBank}>
-              <input placeholder="Enter the bank name" value={form.otherBank} onChange={(event) => set("otherBank", event.target.value)} />
-            </Field>
-          )}
-          <Field label="Purpose of loan" className="span-2">
-            <textarea placeholder="Enter the purpose" value={form.purpose} onChange={(event) => set("purpose", event.target.value)} />
-          </Field>
-          <Field label="Expected financing date">
-            <input type="date" value={form.expectedDate} onChange={(event) => set("expectedDate", event.target.value)} />
-          </Field>
           <Field label="Lead source">
             <select value={form.leadSource} onChange={(event) => set("leadSource", event.target.value)}>
               <option value="">Select</option>

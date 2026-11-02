@@ -159,6 +159,8 @@ const CRUMB: Record<string, string> = {
   applications: "Application list",
   "service-requests": "Service request list",
   "service-master": "Service master",
+  reports: "Reports",
+  "bank-master": "Bank master",
   "work-queue": "My work queue",
   customers: "Customer profiles",
   verification: "Verification queue",
@@ -199,6 +201,11 @@ function navCurrent(pathname: string, search: string, href: string) {
     const wanted = new URLSearchParams(query).get("tab") ?? "categories";
     return tab === wanted;
   }
+  if (query) {
+    const wanted = new URLSearchParams(query);
+    const actual = new URLSearchParams(search);
+    return pathname === path && [...wanted.keys()].every((key) => actual.get(key) === wanted.get(key));
+  }
   if (pathname === path) return true;
   if (path === "/dashboard") return false;
   return pathname.startsWith(`${path}/`);
@@ -217,6 +224,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
   const [search, setSearch] = useState("");
   const [open, setOpen] = useState(false);
   const [navMenu, setNavMenu] = useState<string | null>(null);
+  const [navPos, setNavPos] = useState({ left: 0, top: 0 });
   const [query, setQuery] = useState("");
   const [menu, setMenu] = useState<"search" | "bell" | "user" | null>(null);
 
@@ -265,12 +273,15 @@ export function Shell({ children }: { children: React.ReactNode }) {
   if (!ready || !state || !user) return <DeskSkeleton />;
 
   const groups = navFor(state);
+  const menuOf = (section: string) => groups.find((group) => group.section === section)?.items ?? [];
   const headerMenus = [
-    { label: "Dashboard", items: groups.flatMap((group) => group.items).filter((item) => item.href === "/dashboard") },
-    { label: "Customers", items: groups.find((group) => group.section === "Customer and Lead Management")?.items ?? [] },
-    { label: "Service Requests", items: groups.find((group) => group.section === "Service Requests")?.items ?? [] },
-    { label: "Configuration", items: groups.find((group) => group.section === "Document Master and Checklist Configuration")?.items ?? [] },
-    { label: "Administration", items: groups.find((group) => group.section === "Administration")?.items ?? [] },
+    { label: "Dashboard", items: menuOf("Dashboard") },
+    { label: "Lead & Customer", items: menuOf("Lead & Customer") },
+    { label: "Service Requests", items: menuOf("Service Requests") },
+    { label: "Tasks & Activities", items: menuOf("Tasks & Activities") },
+    { label: "Reports", items: menuOf("Reports") },
+    { label: "Masters & Configuration", items: menuOf("Masters & Configuration") },
+    { label: "Administration", items: menuOf("Administration") },
     {
       label: "Customer Portal",
       items: groups.flatMap((group) => group.items).filter((item) => item.href === "/customer").map((item) => ({ ...item, label: "Document portal" })),
@@ -301,7 +312,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
             <span className="mark">V</span>
             <span className="brand-name">VR Worldwide</span>
           </Link>
-          <nav className="head-nav" aria-label="Desk">
+          <nav className="head-nav" aria-label="Desk" onScroll={() => setNavMenu(null)}>
             {headerMenus.map((group) => {
               const current = group.items.some((item) => navCurrent(pathname, search, item.href));
               if (group.items.length === 1 && group.label === "Dashboard") {
@@ -319,7 +330,11 @@ export function Shell({ children }: { children: React.ReactNode }) {
                     className="head-link"
                     type="button"
                     aria-expanded={expanded}
-                    onClick={() => setNavMenu(expanded ? null : group.label)}
+                    onClick={(event) => {
+                      const box = event.currentTarget.getBoundingClientRect();
+                      setNavPos({ left: box.left, top: box.bottom + 6 });
+                      setNavMenu(expanded ? null : group.label);
+                    }}
                   >
                     {group.label}
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
@@ -327,7 +342,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
                     </svg>
                   </button>
                   {expanded && (
-                    <div className="head-panel">
+                    <div className="head-panel" style={{ left: navPos.left, top: navPos.top }}>
                       {group.items.map((item) => {
                         const active = navCurrent(pathname, search, item.href);
                         return (

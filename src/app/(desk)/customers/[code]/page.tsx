@@ -8,7 +8,7 @@ import { FormDialog } from "@/components/form-dialog";
 import { Button, ButtonLink, Field, PageHeader, RowAction, StatusText, DataTable } from "@/components/ui";
 import { can, userName } from "@/lib/access";
 import { updateCustomer, validateCustomerRecords } from "@/lib/actions";
-import { BANKS, EMIRATES, LEAD_STATUSES, LEGAL_TYPES, LOBS } from "@/lib/constants";
+import { bankList, EMIRATES, LEAD_STATUSES, LEGAL_TYPES, LOBS } from "@/lib/constants";
 import { aed, formatWhen, uid } from "@/lib/format";
 import { useDesk } from "@/lib/store";
 import type { Customer } from "@/lib/types";
@@ -20,6 +20,7 @@ export default function CustomerPage() {
   const { state, replace, user } = useDesk();
   const customer = state?.customers.find((item) => item.code === params.code);
   const [tab, setTab] = useState<string | null>(null);
+  const [basicOpen, setBasicOpen] = useState(false);
   const [draft, setDraft] = useState<Customer | null>(null);
   const [saved, setSaved] = useState(false);
   const [formError, setFormError] = useState("");
@@ -53,6 +54,21 @@ export default function CustomerPage() {
     replace(updateCustomer(state!, draft.id, draft, user!, detail));
     setSaved(true);
     return true;
+  }
+
+  function patchPrimary(partial: Partial<Customer["contacts"][number]>) {
+    setDraft((current) => (current ? { ...current, contacts: current.contacts.map((item, index) => (index === 0 ? { ...item, ...partial } : item)) } : current));
+    setSaved(false);
+  }
+
+  function closeBasic() {
+    setDraft(structuredClone(customer!));
+    setFormError("");
+    setBasicOpen(false);
+  }
+
+  function submitBasic() {
+    if (save("Customer details saved.")) setBasicOpen(false);
   }
 
   function cancelEdit() {
@@ -392,7 +408,7 @@ export default function CustomerPage() {
               }}
             >
               <option value="">Select a UAE bank</option>
-              {BANKS.filter((item) => item !== "Other").map((item) => (
+              {bankList(state).filter((item) => item !== "Other").map((item) => (
                 <option key={item}>{item}</option>
               ))}
               <option>Other</option>
@@ -509,7 +525,7 @@ export default function CustomerPage() {
                         averageBalances[index] = { ...row, bank: event.target.value };
                         patch({ averageBalances });
                       }}>
-                        {BANKS.map((bank) => <option key={bank}>{bank}</option>)}
+                        {bankList(state).map((bank) => <option key={bank}>{bank}</option>)}
                       </select>
                     </td>
                     <td>
@@ -735,7 +751,7 @@ export default function CustomerPage() {
                           patch({ bounces });
                         }}>
                           <option value="">Select a bank</option>
-                          {BANKS.map((bank) => <option key={bank}>{bank}</option>)}
+                          {bankList(state).map((bank) => <option key={bank}>{bank}</option>)}
                         </select>
                         {bounce.bank === "Other" && (
                           <input placeholder="Other bank name" value={bounce.otherBank ?? ""} onChange={(event) => {
@@ -893,6 +909,34 @@ export default function CustomerPage() {
           router.push(`/service-requests/${id}`);
         }}
       />
+      <section className="panel" style={{ marginBottom: 14 }}>
+        <div className="panel-head">
+          <div>
+            <h2>Customer details</h2>
+            <p className="hint">{customer.code}</p>
+          </div>
+          {canEdit && <RowAction icon="edit" label="Edit customer details" onClick={() => setBasicOpen(true)} />}
+        </div>
+        <div className="fields" style={{ gridTemplateColumns: "repeat(3, minmax(0, 1fr))" }}>
+          <div className="field"><span>Name</span><strong>{customer.name}</strong></div>
+          <div className="field"><span>Email</span><strong>{customer.contacts[0]?.email || "None"}</strong></div>
+          <div className="field"><span>Mobile number</span><strong>{customer.contacts[0]?.mobile || "None"}</strong></div>
+        </div>
+      </section>
+      <FormDialog open={basicOpen} size="small" title="Edit customer details" submitLabel="Save" onClose={closeBasic} onSubmit={submitBasic}>
+        {formError && <p className="err">{formError}</p>}
+        <div className="fields">
+          <Field label="Name" required className="span-2">
+            <input value={draft.name} onChange={(event) => patch({ name: event.target.value })} />
+          </Field>
+          <Field label="Email" required>
+            <input type="email" value={draft.contacts[0]?.email ?? ""} onChange={(event) => patchPrimary({ email: event.target.value })} />
+          </Field>
+          <Field label="Mobile number" required>
+            <input type="tel" value={draft.contacts[0]?.mobile ?? ""} onChange={(event) => patchPrimary({ mobile: event.target.value })} />
+          </Field>
+        </div>
+      </FormDialog>
       <div className="card-grid">
       {TABS.map((name) => (
         <section key={name} className="panel">

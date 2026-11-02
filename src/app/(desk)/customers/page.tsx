@@ -1,9 +1,11 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
-import { Gate, PageHeader, StatusText, DataTable } from "@/components/ui";
-import { userName } from "@/lib/access";
+import { CreateCustomerDialog } from "@/components/create-customer-dialog";
+import { Button, Gate, PageHeader, StatusText, DataTable } from "@/components/ui";
+import { can, userName } from "@/lib/access";
 import { formatWhen } from "@/lib/format";
 import { profileSections } from "@/lib/metrics";
 import { useDesk } from "@/lib/store";
@@ -12,6 +14,8 @@ export default function CustomerProfilesPage() {
   const { state } = useDesk();
   const [q, setQ] = useState("");
   const [status, setStatus] = useState("All");
+  const [adding, setAdding] = useState(false);
+  const router = useRouter();
   const rows = useMemo(() => {
     if (!state) return [];
     return state.customers.filter((customer) => {
@@ -37,6 +41,11 @@ export default function CustomerProfilesPage() {
               <option key={item}>{item}</option>
             ))}
           </select>
+          {can(state, "Leads", "create") && (
+            <Button type="button" className="push" onClick={() => setAdding(true)}>
+              + Create customer
+            </Button>
+          )}
         </div>
         <DataTable>
           <thead>
@@ -81,6 +90,14 @@ export default function CustomerProfilesPage() {
             )}
           </tbody>
         </DataTable>
+        <CreateCustomerDialog
+          open={adding}
+          onClose={() => setAdding(false)}
+          onSaved={(code) => {
+            setAdding(false);
+            router.push(`/customers/${code}`);
+          }}
+        />
       </div>
     </Gate>
   );
