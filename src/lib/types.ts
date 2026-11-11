@@ -590,6 +590,8 @@ export type ServiceChecklistItem = {
   rejectionReason?: string;
   linkedFrom?: string;
   fileName?: string;
+  /** Data URL of the uploaded file, kept only for small files so the desk can open the original. */
+  fileData?: string;
 };
 
 export type ServiceDefinition = {

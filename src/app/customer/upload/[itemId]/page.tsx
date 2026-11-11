@@ -16,6 +16,7 @@ export default function UploadPage() {
   const serviceItem = (state?.serviceInstances ?? []).flatMap((instance) => instance.checklist).find((row) => row.id === itemId);
   const master = state?.documents.find((doc) => doc.code === item?.documentCode);
   const [fileName, setFileName] = useState("");
+  const [fileData, setFileData] = useState<string | undefined>(undefined);
   const [issueDate, setIssueDate] = useState("");
   const [expiryDate, setExpiryDate] = useState("");
   const [periodFrom, setPeriodFrom] = useState("");
@@ -47,7 +48,7 @@ export default function UploadPage() {
         </label>
         <Button type="button" onClick={() => {
           if (!fileName) { setError("Choose a file."); return; }
-          const result = uploadServiceDocument(state, serviceItem.id, fileName, state.portalEmail ?? "Customer");
+          const result = uploadServiceDocument(state, serviceItem.id, fileName, state.portalEmail ?? "Customer", fileData);
           if (result.error) { setError(result.error); return; }
           replace(result.state);
           router.push("/customer/home");
@@ -73,7 +74,13 @@ export default function UploadPage() {
       return;
     }
     setFileName(file.name);
+    setFileData(undefined);
     setError("");
+    if (file.size <= 1_500_000) {
+      const reader = new FileReader();
+      reader.onload = () => setFileData(typeof reader.result === "string" ? reader.result : undefined);
+      reader.readAsDataURL(file);
+    }
   }
 
   function save() {

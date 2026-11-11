@@ -444,17 +444,6 @@ export function Shell({ children }: { children: React.ReactNode }) {
             </div>
           </div>
           </div>
-          <nav className="crumb-bar" aria-label="Breadcrumb">
-            <Link href="/dashboard">Home</Link>
-            {crumbs.map((crumb) => (
-              <span key={crumb.href} style={{ display: "contents" }}>
-                <span className="crumb-sep" aria-hidden="true">
-                  /
-                </span>
-                {crumb.last ? <span aria-current="page">{crumb.label}</span> : <Link href={crumb.href}>{crumb.label}</Link>}
-              </span>
-            ))}
-          </nav>
         </header>
         <main id="content">{children}</main>
       </div>

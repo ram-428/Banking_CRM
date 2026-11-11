@@ -20,6 +20,11 @@ export default function PortalHomePage() {
   const invites = state.invitations.filter((item) => item.email.toLowerCase() === email && item.status !== "Revoked" && item.status !== "Expired");
   const appIds = [...new Set(invites.map((item) => item.applicationId))].filter(Boolean);
   const requestIds = [...new Set(invites.map((item) => item.requestId).filter((item): item is string => Boolean(item)))];
+  const allCounts = [
+    ...appIds.map((appId) => tallyApplication(state.checklist.filter((item) => item.applicationId === appId))),
+    ...requestIds.map((requestId) => tally(state.serviceInstances.filter((instance) => instance.requestId === requestId).flatMap((instance) => instance.checklist))),
+  ];
+  const totals = allCounts.reduce((sum, row) => ({ pending: sum.pending + row.pending, progress: sum.progress + row.progress, approved: sum.approved + row.approved, rejected: sum.rejected + row.rejected }), { pending: 0, progress: 0, approved: 0, rejected: 0 });
   const contact = state.customers.flatMap((customer) => customer.contacts).find((item) => item.email.toLowerCase() === email);
 
   return (
@@ -31,6 +36,12 @@ export default function PortalHomePage() {
           <p className="lede portal-lede">Upload what was requested. A file stays in review until the desk accepts that exact version.</p>
         </div>
       </header>
+      <div className="portal-stats">
+        <div className="portal-stat tone-amber"><strong>{totals.pending}</strong><span>To upload</span></div>
+        <div className="portal-stat tone-info"><strong>{totals.progress}</strong><span>In review</span></div>
+        <div className="portal-stat tone-olive"><strong>{totals.approved}</strong><span>Accepted</span></div>
+        <div className="portal-stat tone-danger"><strong>{totals.rejected}</strong><span>Needs attention</span></div>
+      </div>
       {appIds.length === 0 && requestIds.length === 0 && <div className="banner">No open invitation is linked to {email}.</div>}
       {appIds.map((appId) => {
         const app = state.applications.find((item) => item.id === appId);

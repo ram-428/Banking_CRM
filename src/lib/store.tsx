@@ -118,7 +118,11 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (!state) return;
-    sessionStorage.setItem(KEY, JSON.stringify(state));
+    try {
+      sessionStorage.setItem(KEY, JSON.stringify(state));
+    } catch {
+      // Storage is full; the session keeps working from memory.
+    }
   }, [state]);
 
   const value = useMemo<StoreValue>(
