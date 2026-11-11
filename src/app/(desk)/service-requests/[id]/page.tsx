@@ -8,9 +8,26 @@ import { ServicePanels, type PendingSubmit } from "@/components/service-panels";
 import { Button, DataTable, Field, Gate, PageHeader, RowAction, StatusText } from "@/components/ui";
 import { can, userName } from "@/lib/access";
 import { saveServiceActivity, sendServiceInvitation, setChecklistStatus, transitionService } from "@/lib/actions";
+import { sampleDocumentPdf } from "@/lib/sample-pdf";
 import { isTerminal, mandatoryApproved, parentRequestStatus } from "@/lib/request-status";
 import { useDesk } from "@/lib/store";
-import type { ServiceDocStatus } from "@/lib/types";
+import type { ServiceChecklistItem, ServiceDocStatus } from "@/lib/types";
+
+function openDocument(item: ServiceChecklistItem, customerName: string) {
+  const tab = window.open("", "_blank");
+  if (!tab) return;
+  const show = (blob: Blob) => {
+    tab.location.href = URL.createObjectURL(blob);
+  };
+  if (item.fileData) {
+    fetch(item.fileData)
+      .then((response) => response.blob())
+      .then(show)
+      .catch(() => tab.close());
+    return;
+  }
+  show(sampleDocumentPdf({ title: item.name, code: item.documentCode, holder: customerName, status: item.status }));
+}
 
 const DOC_STATUSES: ServiceDocStatus[] = ["Pending", "Uploaded", "Under Review", "Approved", "Rejected", "Expired"];
 
@@ -201,6 +218,7 @@ export default function ServiceRequestWorkspacePage() {
                       <th>Document</th>
                       <th>Requirement</th>
                       <th>Status</th>
+                      <th>View</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -213,6 +231,7 @@ export default function ServiceRequestWorkspacePage() {
                         </td>
                         <td>{item.requirement}</td>
                         <td><StatusText value={item.status} /></td>
+                        <td><RowAction icon="view" label={`View ${item.name}`} onClick={() => openDocument(item, customer?.name ?? "Customer")} /></td>
                       </tr>
                     ))}
                   </tbody>
@@ -245,6 +264,7 @@ export default function ServiceRequestWorkspacePage() {
                         <th>Document</th>
                         <th>Requirement</th>
                         <th>Status</th>
+                        <th>View</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -264,6 +284,7 @@ export default function ServiceRequestWorkspacePage() {
                               ))}
                             </select>
                           </td>
+                          <td><RowAction icon="view" label={`View ${item.name}`} onClick={() => openDocument(item, customer?.name ?? "Customer")} /></td>
                         </tr>
                       ))}
                     </tbody>

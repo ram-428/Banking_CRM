@@ -379,16 +379,13 @@ export function revokeInvitation(state: State, id: string, actor: User): State {
 
 export function portalLogin(state: State, email: string): { state: State; error?: string } {
   const normalized = email.trim().toLowerCase();
-  const invite = state.invitations.find((item) => item.email.toLowerCase() === normalized && item.status !== "Revoked");
-  if (!invite) return { state, error: "No open invitation matches this email." };
-  if (invite.status === "Expired" || new Date(invite.expiresAt).getTime() < Date.now()) {
-    return { state, error: "This invitation has expired. Ask your relationship manager to send a new link." };
-  }
+  const mine = state.invitations.filter((item) => item.email.toLowerCase() === normalized && item.status !== "Revoked");
+  if (mine.length === 0) return { state, error: "No open invitation matches this email." };
   return {
     state: {
       ...state,
       portalEmail: normalized,
-      invitations: state.invitations.map((item) => (item.id === invite.id && item.status === "Sent" ? { ...item, status: "Opened" } : item)),
+      invitations: state.invitations.map((item) => (mine.some((row) => row.id === item.id) && item.status === "Sent" ? { ...item, status: "Opened" } : item)),
     },
   };
 }
@@ -1153,7 +1150,7 @@ export function createPortalServiceRequest(
   return { state: next, id: request.id };
 }
 
-export function uploadServiceDocument(state: State, itemId: string, fileName: string, uploadedBy: string): { state: State; error?: string } {
+export function uploadServiceDocument(state: State, itemId: string, fileName: string, uploadedBy: string, fileData?: string): { state: State; error?: string } {
   const instance = state.serviceInstances.find((item) => item.checklist.some((row) => row.id === itemId));
   const item = instance?.checklist.find((row) => row.id === itemId);
   if (!instance || !item) return { state, error: "This document is not on an open service checklist." };
@@ -1168,7 +1165,7 @@ export function uploadServiceDocument(state: State, itemId: string, fileName: st
   const request = state.serviceRequests.find((row) => row.id === instance.requestId);
   const nextInstance: ServiceInstance = {
     ...instance,
-    checklist: instance.checklist.map((row) => (row.id === itemId ? { ...row, status: "Uploaded", fileName, rejectionReason: undefined } : row)),
+    checklist: instance.checklist.map((row) => (row.id === itemId ? { ...row, status: "Uploaded", fileName, fileData, rejectionReason: undefined } : row)),
   };
   let next = replaceInstance(state, nextInstance, { id: uploadedBy } as User, "Upload document", `${item.name} uploaded as ${fileName}.`, item.status);
   next = notice(next, "Document uploaded", `${item.name} is waiting for review on ${request?.number ?? instance.requestId}.`, `/service-requests/${instance.requestId}`, instance.assigneeId);
